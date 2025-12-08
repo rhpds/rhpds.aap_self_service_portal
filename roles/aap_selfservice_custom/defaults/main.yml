@@ -158,6 +158,17 @@ aap_selfservice_custom_job_templates:
       - rhel
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: RHEL10server
+      description: Provide a name for the new server
+      spec:
+        - question_name: Enter a name for the RHEL10 server
+          question_description: Provide a name for the new server
+          required: true
+          type: text
+          variable: host
+          default: rhel10
 
   - name: Cloud/AWS Create RHEL9 instance
     description: Run a job template to create a RHEL 9 instance and provide some details
@@ -173,6 +184,17 @@ aap_selfservice_custom_job_templates:
       - rhel
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: RHEL9server
+      description: Provide a name for the new server
+      spec:
+        - question_name: Enter a name for the RHEL9 server
+          question_description: Provide a name for the new server
+          required: true
+          type: text
+          variable: host
+          default: rhel9
 
   - name: Cloud/AWS Create VCP
     description: Run a job template to create an AWS VPC, and all its required networking
@@ -187,6 +209,17 @@ aap_selfservice_custom_job_templates:
       - aws
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: awsvpc
+      description: Name name the VPC
+      spec:
+        - question_name: Enter a name for the AWS VPC
+          question_description: Name the VPC
+          required: true
+          type: text
+          variable: vpc_name
+          default: my_vpc
 
   - name: Cloud/AWS Snapshot ec2 instance
     description: Run a job template to capture a snapshot of an AWS ec2 instance
@@ -201,6 +234,17 @@ aap_selfservice_custom_job_templates:
       - aws
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: awssnapshot
+      description: Provide an ec2 instance name
+      spec:
+        - question_name: Enter a name for the ec2 instance you want to snapshot
+          question_description: Provide an ec2 instance name
+          required: true
+          type: text
+          variable: ec2_instance
+          default: my-ec2-instance
 
   # Network Job Templates
   - name: Network/Backup Network Device
@@ -216,6 +260,22 @@ aap_selfservice_custom_job_templates:
       - network
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: backupnetworkdevice
+      description: Backup a network device
+      spec:
+        - question_name: Enter a name for the NETWORK DEVICE you want to BACKUP
+          question_description: Backup a network device
+          required: true
+          type: multiselect
+          variable: networkdevice
+          choices:
+            - cisco9400-ent1
+            - cisco9400-ent2
+            - juniperex4600-ent1
+            - arubacx9300-ent1
+          default: cisco9400-ent1
 
   - name: Network/Deploy Network device configuration
     description: Run a job template to APPLY a configuration or UPDATE a configuration on a network device
@@ -230,6 +290,23 @@ aap_selfservice_custom_job_templates:
       - network
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: deploynetworkdevice
+      description: Deploy a Network Device configuration
+      spec:
+        - question_name: Deploy a Network Device configuration
+          question_description: Deploy a Network Device configuration
+          required: true
+          type: multiselect
+          variable: networkdevice
+          choices:
+            - Cisco Catalyst 8500
+            - Cisco Switch
+            - Aruba Switch
+            - Fortinet firewall
+            - Check Point firewall
+            - Cisco Meraki
 
   - name: Network/Onboard Network device
     description: Run a job template to ONBOARD a network device
@@ -244,6 +321,23 @@ aap_selfservice_custom_job_templates:
       - network
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: onboardnetworkdevice
+      description: Onboard a Network Device
+      spec:
+        - question_name: What type of Network Device are you onboarding?
+          question_description: Onboard a Network Device
+          required: true
+          type: multiselect
+          variable: networkdevice
+          choices:
+            - Cisco Catalyst 8500
+            - Cisco Switch
+            - Aruba Switch
+            - Fortinet firewall
+            - Check Point firewall
+            - Cisco Meraki
 
   - name: Network/Restore Network device
     description: Run a job template to RESTORE a network device to a previous configuration
@@ -258,6 +352,21 @@ aap_selfservice_custom_job_templates:
       - network
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: restorenetworkdevice
+      description: Restore a network device
+      spec:
+        - question_name: Enter a name for the NETWORK DEVICE you want to RESTORE
+          question_description: Restore a network device
+          required: true
+          type: multiselect
+          variable: networkdevice
+          choices:
+            - cisco9400-ent1
+            - cisco9400-ent2
+            - juniperex4600-ent1
+            - arubacx9300-ent1
 
   # RHEL Job Templates
   - name: Linux/RHEL Deploy Applications to RHEL
@@ -273,6 +382,33 @@ aap_selfservice_custom_job_templates:
       - rhel
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: deployapplicationtorhel
+      description: Deploy application(s) to RHEL server(s)
+      spec:
+        - question_name: Enter a name for the RHEL server you want to deploy application(s) to
+          question_description: select RHEL server(s) to deploy the application(s) to
+          required: true
+          type: multiselect
+          variable: host
+          choices:
+            - rhel1
+            - rhel2
+            - rhel3
+            - rhel4
+          default: rhel1
+        - question_name: What applications would you like to install to RHEL
+          question_description: select application(s) to install to the RHEL server(s)
+          required: true
+          type: multiselect
+          variable: application
+          choices:
+            - Apache
+            - Podman
+            - MariaDB
+            - PostgreSQL
+            - vi improved (vim)
 
   - name: Linux/RHEL Install NGINX on RHEL
     description: Run a job template to INSTALL NGINX on RHEL server
@@ -287,6 +423,22 @@ aap_selfservice_custom_job_templates:
       - rhel
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: installnginxonrhel
+      description: Deploy NGINX to RHEL server(s)
+      spec:
+        - question_name: Enter a name for the RHEL server you want to deploy NGINX toapplication(s) to
+          question_description: Deploy NGINX to RHEL server(s)
+          required: true
+          type: multiselect
+          variable: host
+          choices:
+            - rhel1
+            - rhel2
+            - rhel3
+            - rhel4
+          default: rhel1
 
   - name: Linux/RHEL Patch RHEL Servers
     description: Run a job template to PATCH RHEL servers
@@ -301,6 +453,22 @@ aap_selfservice_custom_job_templates:
       - rhel
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: patchrhelservers
+      description: RHEL server you want to PATCH
+      spec:
+        - question_name: Enter a name for the RHEL server you want to PATCH
+          question_description: RHEL server you want to PATCH
+          required: true
+          type: multiselect
+          variable: host
+          choices:
+            - rhel1
+            - rhel2
+            - rhel3
+            - rhel4
+          default: rhel1
 
   - name: Linux/RHEL START Service on RHEL
     description: Run a job template to START a Linux service that you provide on RHEL
@@ -315,6 +483,28 @@ aap_selfservice_custom_job_templates:
       - rhel
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: startrhelservice
+      description: Start a Linux service on RHEL
+      spec:
+        - question_name: Enter a name for the RHEL server you want to START a service on
+          question_description: Select RHEL server(s) to start the service on
+          required: true
+          type: multiselect
+          variable: host
+          choices:
+            - rhel1
+            - rhel2
+            - rhel3
+            - rhel4
+          default: rhel1
+        - question_name: Enter a name for the RHEL SERVICE you want to START
+          question_description: Enter the service you want to START
+          required: true
+          type: text
+          variable: service
+          default: firewalld
 
   - name: Linux/RHEL STOP Service on RHEL
     description: Run a job template to STOP a Linux service that you provide on RHEL
@@ -329,6 +519,27 @@ aap_selfservice_custom_job_templates:
       - rhel
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    survey_enabled: true
+    survey_spec:
+      name: stoprhelservice
+      description: Stop a Linux service on RHEL
+      spec:
+        - question_name: Enter a name for the RHEL server you want to STOP a service on
+          question_description: Select RHEL server(s) to stop the service on
+          required: true
+          type: multiselect
+          variable: host
+          choices:
+            - rhel1
+            - rhel2
+            - rhel3
+            - rhel4
+        - question_name: Enter a name for the RHEL SERVICE you want to STOP
+          question_description: Enter the service you want to STOP
+          required: true
+          type: text
+          variable: service
+          default: ntpd
 
   - name: RHEL / Update RHEL Time Servers
     description: The Imported CUSTOM template in Self-Service portal will point to this job template
@@ -344,7 +555,7 @@ aap_selfservice_custom_job_templates:
       - custom
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
-    
+
 # -------------------------------------------------------------------
 # Behavior Settings
 # -------------------------------------------------------------------
