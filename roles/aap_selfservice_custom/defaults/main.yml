@@ -307,12 +307,13 @@ aap_selfservice_custom_job_templates:
           type: multiselect
           variable: networkdevice
           choices:
-            - Cisco Catalyst 8500
-            - Cisco Switch
-            - Aruba Switch
-            - Fortinet firewall
-            - Check Point firewall
-            - Cisco Meraki
+            - "Cisco Catalyst 8500"
+            - "Cisco Switch"
+            - "Aruba Switch"
+            - "Fortinet Firewall"
+            - "Check Point Firewall"
+            - "Cisco Meraki"
+          default: ""
 
   - name: Network/Onboard Network device
     description: Run a job template to ONBOARD a network device
@@ -338,12 +339,13 @@ aap_selfservice_custom_job_templates:
           type: multiselect
           variable: networkdevice
           choices:
-            - Cisco Catalyst 8500
-            - Cisco Switch
-            - Aruba Switch
-            - Fortinet firewall
-            - Check Point firewall
-            - Cisco Meraki
+            - "Cisco Catalyst 8500"
+            - "Cisco Switch"
+            - "Aruba Switch"
+            - "Fortinet Firewall"
+            - "Check Point Firewall"
+            - "Cisco Meraki"
+          default: ""
 
   - name: Network/Restore Network device
     description: Run a job template to RESTORE a network device to a previous configuration
@@ -373,6 +375,7 @@ aap_selfservice_custom_job_templates:
             - cisco9400-ent2
             - juniperex4600-ent1
             - arubacx9300-ent1
+          default: ""
 
   # RHEL Job Templates
   - name: Linux/RHEL Deploy Applications to RHEL
@@ -414,7 +417,8 @@ aap_selfservice_custom_job_templates:
             - Podman
             - MariaDB
             - PostgreSQL
-            - vi improved (vim)
+            - "vi Improved (vim)"
+          default: Apache
 
   - name: Linux/RHEL Install NGINX on RHEL
     description: Run a job template to INSTALL NGINX on RHEL server
@@ -540,6 +544,7 @@ aap_selfservice_custom_job_templates:
             - rhel2
             - rhel3
             - rhel4
+          default: ""
         - question_name: Enter a name for the RHEL SERVICE you want to STOP
           question_description: Enter the service you want to STOP
           required: true
