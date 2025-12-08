@@ -160,14 +160,17 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: RHEL10server
-      description: Provide a name for the new server
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the RHEL10 server
           question_description: Provide a name for the new server
           required: true
           type: text
           variable: host
+          choices: ""
+          min: 4
+          max: 50
           default: rhel10
 
   - name: Cloud/AWS Create RHEL9 instance
@@ -186,14 +189,17 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: RHEL9server
-      description: Provide a name for the new server
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the RHEL9 server
           question_description: Provide a name for the new server
           required: true
           type: text
           variable: host
+          choices: ""
+          min: 4
+          max: 50
           default: rhel9
 
   - name: Cloud/AWS Create VCP
@@ -211,8 +217,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: awsvpc
-      description: Name name the VPC
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the AWS VPC
           question_description: Name the VPC
@@ -236,8 +242,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: awssnapshot
-      description: Provide an ec2 instance name
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the ec2 instance you want to snapshot
           question_description: Provide an ec2 instance name
@@ -262,8 +268,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: backupnetworkdevice
-      description: Backup a network device
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the NETWORK DEVICE you want to BACKUP
           question_description: Backup a network device
@@ -292,8 +298,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: deploynetworkdevice
-      description: Deploy a Network Device configuration
+      name: ""
+      description: ""
       spec:
         - question_name: Deploy a Network Device configuration
           question_description: Deploy a Network Device configuration
@@ -323,8 +329,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: onboardnetworkdevice
-      description: Onboard a Network Device
+      name: ""
+      description: ""
       spec:
         - question_name: What type of Network Device are you onboarding?
           question_description: Onboard a Network Device
@@ -354,8 +360,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: restorenetworkdevice
-      description: Restore a network device
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the NETWORK DEVICE you want to RESTORE
           question_description: Restore a network device
@@ -384,8 +390,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: deployapplicationtorhel
-      description: Deploy application(s) to RHEL server(s)
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the RHEL server you want to deploy application(s) to
           question_description: select RHEL server(s) to deploy the application(s) to
@@ -425,8 +431,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: installnginxonrhel
-      description: Deploy NGINX to RHEL server(s)
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the RHEL server you want to deploy NGINX toapplication(s) to
           question_description: Deploy NGINX to RHEL server(s)
@@ -455,8 +461,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: patchrhelservers
-      description: RHEL server you want to PATCH
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the RHEL server you want to PATCH
           question_description: RHEL server you want to PATCH
@@ -485,8 +491,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: startrhelservice
-      description: Start a Linux service on RHEL
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the RHEL server you want to START a service on
           question_description: Select RHEL server(s) to start the service on
@@ -521,8 +527,8 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     survey_enabled: true
     survey_spec:
-      name: stoprhelservice
-      description: Stop a Linux service on RHEL
+      name: ""
+      description: ""
       spec:
         - question_name: Enter a name for the RHEL server you want to STOP a service on
           question_description: Select RHEL server(s) to stop the service on
