@@ -20,6 +20,8 @@
     labels: "{{ item.labels | default([]) }}"
     ask_inventory_on_launch: "{{ item.ask_inventory_on_launch | default(false) }}"
     ask_credential_on_launch: "{{ item.ask_credential_on_launch | default(false) }}"
+    survey_enabled: "{{ item.survey_enabled | default(false) }}"
+    survey_spec: "{{ item.survey_spec | default(omit) }}"
     state: present
     controller_host: "{{ aap_selfservice_custom_controller_url }}"
     controller_username: "{{ aap_selfservice_custom_admin_username }}"
