@@ -73,7 +73,6 @@ ifdef::validation_status[]
 |===
 2+| Environment Health Check
 | Overall Status | *{validation_status}*
-| Validation Time | {validation_timestamp}
 | Total Components | {validation_total}
 | Healthy | {validation_healthy}
 | Degraded | {validation_degraded}
@@ -197,7 +196,6 @@ Saved via `agnosticd_user_info` for catalog display:
 
 ```yaml
 validation_status: "HEALTHY" | "DEGRADED" | "FAILED"
-validation_timestamp: "2026-01-13T12:34:56Z"
 validation_total: "123"
 validation_healthy: "120"
 validation_degraded: "3"

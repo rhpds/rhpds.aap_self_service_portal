@@ -52,13 +52,6 @@
       }}
 
 # ---------------------------------------------------------------
-# Generate timestamp
-# ---------------------------------------------------------------
-- name: Get current timestamp
-  ansible.builtin.set_fact:
-    _validation_timestamp: "{{ now(utc=true) | to_datetime | strftime('%Y-%m-%dT%H:%M:%SZ') }}"
-
-# ---------------------------------------------------------------
 # Format issues list for display
 # ---------------------------------------------------------------
 - name: Format issues list
@@ -80,7 +73,6 @@
       ================================================
 
       Overall Status: {{ _validation_status }}
-      Timestamp: {{ _validation_timestamp }}
 
       Components Summary:
       - Total: {{ _ocp4_workload_aap_multiinstance_validation_total }}
@@ -114,7 +106,6 @@
   agnosticd.core.agnosticd_user_info:
     data:
       validation_status: "{{ _validation_status }}"
-      validation_timestamp: "{{ _validation_timestamp }}"
       validation_total: "{{ _ocp4_workload_aap_multiinstance_validation_total }}"
       validation_healthy: "{{ _ocp4_workload_aap_multiinstance_validation_healthy }}"
       validation_degraded: "{{ _ocp4_workload_aap_multiinstance_validation_degraded }}"
