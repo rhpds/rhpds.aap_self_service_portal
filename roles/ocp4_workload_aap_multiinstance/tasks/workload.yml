@@ -124,7 +124,7 @@
     status_code: 200
   register: _aap_api_check
   until: _aap_api_check.status == 200
-  retries: 30
+  retries: 60  # 60 retries x 10s = 10 minutes (increased for 60-user deployments)
   delay: 10
   loop: "{{ _aap_multi_user_info }}"
   loop_control:
@@ -181,7 +181,7 @@
     status_code: 200
   register: _aap_api_check
   until: _aap_api_check.status == 200
-  retries: 30
+  retries: 60  # 60 retries x 10s = 10 minutes (aligned with multi-user timeout)
   delay: 10
 
 # Download plugins once (single instance)
