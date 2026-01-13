@@ -83,10 +83,10 @@
     _ssap_route_url: >-
       {{
         'https://' + (_ssap_routes.resources | default([]) |
-         selectattr('metadata.name', 'search', 'ssap') |
+         selectattr('metadata.name', 'equalto', 'self-service-rhaap-portal') |
          list | first).spec.host
         if (_ssap_routes.resources | default([]) |
-            selectattr('metadata.name', 'search', 'ssap') |
+            selectattr('metadata.name', 'equalto', 'self-service-rhaap-portal') |
             list | length > 0)
         else ''
       }}
