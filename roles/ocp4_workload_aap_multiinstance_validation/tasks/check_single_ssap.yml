@@ -63,8 +63,6 @@
       {{
         _ssap_pods.resources | default([]) |
         selectattr('status.phase', 'equalto', 'Running') |
-        selectattr('status.containerStatuses', 'defined') |
-        selectattr('status.containerStatuses', 'all', 'ready', true) |
         list | length
       }}
     _ssap_pods_total: "{{ _ssap_pods.resources | default([]) | length }}"
