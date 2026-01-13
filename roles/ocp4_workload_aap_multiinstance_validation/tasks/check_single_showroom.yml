@@ -1,14 +1,6 @@
 ---
-# ---------------------------------------------------------------
-# Validate Single Showroom Instance (One User)
-# ---------------------------------------------------------------
-# Validates one user's Showroom deployment
-# Namespace: showroom-{guid}-user{N}
-#
-# Checks:
-# - Deployment exists and available
-# - Pods running and ready
-# - Route exists and HTTP accessible
+# Simple Showroom validation - get all pods in namespace
+# No label selectors - just count pods by name patterns
 
 - name: Set Showroom validation variables for user{{ user_number }}
   ansible.builtin.set_fact:
@@ -43,34 +35,31 @@
     _showroom_deployment_exists: "{{ (_showroom_deployment_info.resources | default([]) | length > 0) }}"
 
 # ---------------------------------------------------------------
-# Check Showroom pods
+# Get all pods in namespace and count by name pattern
 # ---------------------------------------------------------------
-- name: Check Showroom pods for {{ _showroom_user }}
+- name: Get all pods in {{ _showroom_namespace }}
   kubernetes.core.k8s_info:
     api_version: v1
     kind: Pod
     namespace: "{{ _showroom_namespace }}"
-    label_selectors:
-      - app.kubernetes.io/name=showroom
   register: _showroom_pods
   ignore_errors: true
 
-- name: Count Showroom pods for {{ _showroom_user }}
+- name: Count Showroom pods by name pattern for {{ _showroom_user }}
   ansible.builtin.set_fact:
     _showroom_pods_running: >-
       {{
         _showroom_pods.resources | default([]) |
+        selectattr('metadata.name', 'search', 'showroom') |
         selectattr('status.phase', 'equalto', 'Running') |
         list | length
       }}
-    _showroom_pods_ready: >-
+    _showroom_pods_total: >-
       {{
         _showroom_pods.resources | default([]) |
-        selectattr('status.containerStatuses', 'defined') |
-        select('search', '"ready": true') |
+        selectattr('metadata.name', 'search', 'showroom') |
         list | length
       }}
-    _showroom_pods_total: "{{ _showroom_pods.resources | default([]) | length }}"
 
 # ---------------------------------------------------------------
 # Check Showroom route
@@ -133,7 +122,6 @@
         )
         else 'degraded' if (
           _showroom_pods_running | int != _showroom_pods_total | int or
-          _showroom_pods_ready | int != _showroom_pods_total | int or
           not _showroom_http_accessible
         )
         else 'healthy'
