@@ -92,7 +92,7 @@
     kind: Pod
     namespace: "{{ _current_namespace }}"
     label_selectors:
-      - app.kubernetes.io/component=eda
+      - app.kubernetes.io/part-of={{ _current_user }}-aap-eda
   register: _aap_eda_pods
   ignore_errors: true
   when: ocp4_workload_aap_multiinstance_validation_check_eda | bool
