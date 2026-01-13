@@ -1,0 +1,13 @@
+---
+# Playbook to validate AAP Multi-Instance Workshop
+# Usage: ansible-playbook playbooks/validate_workshop.yml -e guid=YOUR_GUID -e num_users=NUMBER
+
+- name: Validate AAP Multi-Instance Workshop
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Run validation role
+      ansible.builtin.include_role:
+        name: rhpds.aap_self_service_portal.ocp4_workload_aap_multiinstance_validation
