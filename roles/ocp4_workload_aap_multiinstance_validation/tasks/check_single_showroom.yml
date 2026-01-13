@@ -64,11 +64,10 @@
 # ---------------------------------------------------------------
 # Check Showroom route
 # ---------------------------------------------------------------
-- name: Check Showroom route for {{ _showroom_user }}
+- name: Check Showroom routes for {{ _showroom_user }}
   kubernetes.core.k8s_info:
     api_version: route.openshift.io/v1
     kind: Route
-    name: "{{ _showroom_deployment }}"
     namespace: "{{ _showroom_namespace }}"
   register: _showroom_route_info
   ignore_errors: true
