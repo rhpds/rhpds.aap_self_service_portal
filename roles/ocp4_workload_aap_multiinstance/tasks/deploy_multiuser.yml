@@ -216,7 +216,8 @@
     - aap_instance_enable_controller | bool
   ansible.builtin.include_tasks: inject_manifest.yml
   vars:
-    # AAP 2.6: Use controller-specific route for manifest injection (not gateway route)
+    # AAP 2.6: Use gateway route for health check, controller route for manifest injection
+    manifest_gateway_url: "https://{{ item.route }}"
     manifest_controller_url: "https://{{ item.controller_route }}"
     manifest_admin_password: "{{ item.password }}"
   loop: "{{ _user_access_info }}"

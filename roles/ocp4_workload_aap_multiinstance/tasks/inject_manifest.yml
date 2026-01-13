@@ -3,7 +3,8 @@
 # Inject AAP Manifest into Controller
 # ---------------------------------------------------------------
 # Variables expected:
-#   manifest_controller_url: Controller URL
+#   manifest_gateway_url: Gateway URL (for health check)
+#   manifest_controller_url: Controller URL (for manifest upload)
 #   manifest_admin_password: Admin password
 
 - name: Generate unique manifest filename
@@ -22,14 +23,14 @@
   ansible.builtin.set_fact:
     _manifest_controller_hostname: "{{ manifest_controller_url | urlsplit('hostname') }}"
 
-- name: Wait for controller to be fully ready before manifest injection
+- name: Wait for AAP gateway to be fully ready before manifest injection
   ansible.builtin.uri:
-    url: "{{ manifest_controller_url }}/api/v2/ping/"
+    url: "{{ manifest_gateway_url }}/api/gateway/v1/"
     method: GET
     validate_certs: false
     status_code: 200
-  register: r_controller_ping
-  until: r_controller_ping.status == 200
+  register: r_gateway_ping
+  until: r_gateway_ping.status == 200
   retries: 30
   delay: 10
 
