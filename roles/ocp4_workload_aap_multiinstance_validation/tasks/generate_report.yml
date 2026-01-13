@@ -103,7 +103,7 @@
 # Save validation data to agnosticd_user_info for catalog display
 # ---------------------------------------------------------------
 - name: Save validation results to user info
-  agnosticd.core.agnosticd_user_info:
+  rhpds.aap_self_service_portal.agnosticd_user_info:
     data:
       validation_status: "{{ _validation_status }}"
       validation_total: "{{ _ocp4_workload_aap_multiinstance_validation_total }}"
