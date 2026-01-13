@@ -56,7 +56,7 @@
 # ---------------------------------------------------------------
 - name: Get current timestamp
   ansible.builtin.set_fact:
-    _validation_timestamp: "{{ ansible_date_time.iso8601 }}"
+    _validation_timestamp: "{{ now(utc=true) | to_datetime | strftime('%Y-%m-%dT%H:%M:%SZ') }}"
 
 # ---------------------------------------------------------------
 # Format issues list for display
