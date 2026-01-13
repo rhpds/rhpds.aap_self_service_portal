@@ -8,9 +8,9 @@ This role validates all deployed components in a multi-user AAP workshop environ
 
 ### Shared Components
 - **Keycloak**: Operator CSV, instance CR, pods, route accessibility
-- **AAP Operator**: CSV status, operator pods (single-user only; multi-user uses per-namespace operators)
 
 ### Per-User Components (for EACH user)
+- **AAP Operator**: CSV status, operator pods (in each user's AAP namespace)
 - **AAP Instance**: AutomationController CR, EDA CR, pods (controller, EDA, PostgreSQL, Redis), routes (gateway & controller)
 - **Self-Service Portal**: Deployment, pods, route accessibility
 - **Showroom**: Deployment, pods, route accessibility (namespace: showroom-{guid}-userN)
@@ -109,8 +109,7 @@ ocp4_workload_aap_multiinstance_validation_check_showroom: true
 
 ```yaml
 ocp4_workload_aap_multiinstance_validation_keycloak_namespace: keycloak
-ocp4_workload_aap_multiinstance_validation_aap_operator_namespace: openshift-operators  # Single-user only
-ocp4_workload_aap_multiinstance_validation_aap_namespace_suffix: "-aap"
+ocp4_workload_aap_multiinstance_validation_aap_namespace_suffix: "-aap"  # AAP operator and instance namespace suffix
 ocp4_workload_aap_multiinstance_validation_ssap_namespace_suffix: "-aap-ssap"
 ocp4_workload_aap_multiinstance_validation_showroom_namespace: showroom-{{ guid | default('00000') }}  # Base pattern, -userN added per-user
 ```
@@ -137,7 +136,8 @@ ocp4_workload_aap_multiinstance_validation_http_success_codes:
 ### Component Checks
 
 - `tasks/check_keycloak.yml`: Validates Keycloak operator and instance
-- `tasks/check_aap_operator.yml`: Validates AAP operator (per-namespace in multi-user mode)
+- `tasks/check_aap_operator.yml`: Loops through all users to validate AAP operators
+- `tasks/check_single_aap_operator.yml`: Validates one user's AAP operator
 - `tasks/check_aap_instances.yml`: Loops through all users to validate AAP instances
 - `tasks/check_single_aap_instance.yml`: Validates one user's AAP deployment
 - `tasks/check_self_service_portals.yml`: Loops through all users to validate portals
@@ -150,6 +150,14 @@ ocp4_workload_aap_multiinstance_validation_http_success_codes:
 - `tasks/generate_report.yml`: Compiles results, saves to `agnosticd_user_info`
 
 ## Validation Logic
+
+### Per-User AAP Operator
+
+For each user:
+
+1. **Namespace**: `{user}-aap` (e.g., user1-aap)
+2. **Operator CSV**: Status phase = Succeeded
+3. **Operator pods**: All Running
 
 ### Per-User AAP Instance
 
@@ -182,14 +190,6 @@ For each user:
 2. **Deployment**: Available condition = True
 3. **Pods**: All Running with ready containers
 4. **Route**: Exists and HTTP accessible
-
-### AAP Operator (Multi-User Mode)
-
-In multi-user deployments:
-
-1. AAP operators are deployed **per-namespace** (user1-aap, user2-aap, etc.)
-2. Operator validation is marked as "N/A - Per-user operators"
-3. Operator health is implicitly validated through per-user AAP instance checks
 
 ### Status Determination
 
