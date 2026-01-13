@@ -10,7 +10,7 @@
 # ---------------------------------------------------------------
 - name: Count total components
   ansible.builtin.set_fact:
-    _ocp4_workload_aap_multiinstance_validation_total: "{{ _ocp4_workload_aap_multiinstance_validation_results | length }}"
+    _ocp4_workload_aap_multiinstance_validation_total: "{{ _ocp4_workload_aap_multiinstance_validation_results | length | int }}"
 
 - name: Count healthy components
   ansible.builtin.set_fact:
@@ -18,7 +18,7 @@
       {{
         _ocp4_workload_aap_multiinstance_validation_results |
         selectattr('status', 'equalto', 'healthy') |
-        list | length
+        list | length | int
       }}
 
 - name: Count degraded components
@@ -27,7 +27,7 @@
       {{
         _ocp4_workload_aap_multiinstance_validation_results |
         selectattr('status', 'equalto', 'degraded') |
-        list | length
+        list | length | int
       }}
 
 - name: Count failed components
@@ -36,7 +36,7 @@
       {{
         _ocp4_workload_aap_multiinstance_validation_results |
         selectattr('status', 'equalto', 'failed') |
-        list | length
+        list | length | int
       }}
 
 # ---------------------------------------------------------------
@@ -46,8 +46,8 @@
   ansible.builtin.set_fact:
     _validation_status: >-
       {{
-        'FAILED' if _ocp4_workload_aap_multiinstance_validation_failed | int > 0
-        else 'DEGRADED' if _ocp4_workload_aap_multiinstance_validation_degraded | int > 0
+        'FAILED' if _ocp4_workload_aap_multiinstance_validation_failed > 0
+        else 'DEGRADED' if _ocp4_workload_aap_multiinstance_validation_degraded > 0
         else 'HEALTHY'
       }}
 
