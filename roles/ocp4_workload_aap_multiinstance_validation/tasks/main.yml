@@ -40,8 +40,8 @@
   ansible.builtin.include_tasks: check_self_service_portals.yml
   when: ocp4_workload_aap_multiinstance_validation_check_self_service_portals | bool
 
-- name: Validate Showroom deployment
-  ansible.builtin.include_tasks: check_showroom.yml
+- name: Validate Showroom instances (per user)
+  ansible.builtin.include_tasks: check_showroom_instances.yml
   when: ocp4_workload_aap_multiinstance_validation_check_showroom | bool
 
 # ---------------------------------------------------------------
