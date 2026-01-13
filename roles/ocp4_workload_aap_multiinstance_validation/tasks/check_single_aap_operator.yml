@@ -49,7 +49,7 @@
   register: _aap_operator_deployments
   ignore_errors: true
 
-- name: Filter operator deployments (pattern: *-operator-controller-manager)
+- name: Filter operator deployments
   ansible.builtin.set_fact:
     _aap_operator_deployment_list: >-
       {{
