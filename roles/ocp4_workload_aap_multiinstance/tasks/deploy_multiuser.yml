@@ -119,9 +119,10 @@
   ansible.builtin.set_fact:
     # 1-10 users: 120 retries x 30s = 60 min
     # 11-20 users: 180 retries x 45s = 135 min
-    # 21+ users: 240 retries x 60s = 240 min
-    _aap_wait_retries: "{{ 120 if aap_instance_num_users | int <= 10 else (180 if aap_instance_num_users | int <= 20 else 240) }}"
-    _aap_wait_delay: "{{ 30 if aap_instance_num_users | int <= 10 else (45 if aap_instance_num_users | int <= 20 else 60) }}"
+    # 21-40 users: 240 retries x 60s = 240 min
+    # 41+ users: 300 retries x 90s = 450 min (for 60-user deployments)
+    _aap_wait_retries: "{{ 120 if aap_instance_num_users | int <= 10 else (180 if aap_instance_num_users | int <= 20 else (240 if aap_instance_num_users | int <= 40 else 300)) }}"
+    _aap_wait_delay: "{{ 30 if aap_instance_num_users | int <= 10 else (45 if aap_instance_num_users | int <= 20 else (60 if aap_instance_num_users | int <= 40 else 90)) }}"
 
 - name: Display deployment timing
   ansible.builtin.debug:
