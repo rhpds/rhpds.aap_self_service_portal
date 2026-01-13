@@ -1,0 +1,105 @@
+---
+# ---------------------------------------------------------------
+# Validate AAP Operator
+# ---------------------------------------------------------------
+# Checks:
+# - AAP operator CSV status (Succeeded)
+# - AAP operator pods running
+
+- name: Check AAP operator CSV
+  kubernetes.core.k8s_info:
+    api_version: operators.coreos.com/v1alpha1
+    kind: ClusterServiceVersion
+    namespace: "{{ ocp4_workload_aap_multiinstance_validation_aap_operator_namespace }}"
+  register: _aap_operator_csv_info
+  ignore_errors: true
+
+- name: Parse AAP operator CSV status
+  ansible.builtin.set_fact:
+    _aap_operator_csv_status: >-
+      {{
+        (_aap_operator_csv_info.resources | default([]) |
+         selectattr('metadata.name', 'search', ocp4_workload_aap_multiinstance_validation_aap_operator_name) |
+         list | first).status.phase | default('NotFound')
+        if (_aap_operator_csv_info.resources | default([]) |
+            selectattr('metadata.name', 'search', ocp4_workload_aap_multiinstance_validation_aap_operator_name) |
+            list | length > 0)
+        else 'NotFound'
+      }}
+
+- name: Check AAP operator pods
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ ocp4_workload_aap_multiinstance_validation_aap_operator_namespace }}"
+    label_selectors:
+      - control-plane=controller-manager
+      - app.kubernetes.io/name=ansible-automation-platform-operator
+  register: _aap_operator_pods
+  ignore_errors: true
+
+- name: Count running AAP operator pods
+  ansible.builtin.set_fact:
+    _aap_operator_pods_running: >-
+      {{
+        _aap_operator_pods.resources | default([]) |
+        selectattr('status.phase', 'equalto', 'Running') |
+        list | length
+      }}
+    _aap_operator_pods_total: "{{ _aap_operator_pods.resources | default([]) | length }}"
+
+# ---------------------------------------------------------------
+# Determine AAP Operator validation status
+# ---------------------------------------------------------------
+- name: Determine AAP Operator status
+  ansible.builtin.set_fact:
+    _aap_operator_status: >-
+      {{
+        'failed' if (
+          _aap_operator_csv_status != 'Succeeded' or
+          _aap_operator_pods_running | int == 0
+        )
+        else 'degraded' if (
+          _aap_operator_pods_running | int != _aap_operator_pods_total | int
+        )
+        else 'healthy'
+      }}
+
+- name: Add AAP Operator validation result
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_results: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_results + [{
+          'component': 'AAP Operator',
+          'status': _aap_operator_status,
+          'namespace': ocp4_workload_aap_multiinstance_validation_aap_operator_namespace,
+          'details': {
+            'csv_status': _aap_operator_csv_status,
+            'pods': _aap_operator_pods_running ~ '/' ~ _aap_operator_pods_total
+          }
+        }]
+      }}
+
+- name: Add AAP Operator issues if failed or degraded
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_issues: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_issues + [
+          'AAP Operator: CSV ' ~ _aap_operator_csv_status ~ ' (expected Succeeded)'
+        ]
+      }}
+  when:
+    - _aap_operator_status in ['failed', 'degraded']
+    - _aap_operator_csv_status != 'Succeeded'
+
+- name: Add AAP Operator issues if pods not running
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_issues: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_issues + [
+          'AAP Operator: ' ~ _aap_operator_pods_running ~ '/' ~ _aap_operator_pods_total ~ ' pods running'
+        ]
+      }}
+  when:
+    - _aap_operator_status in ['failed', 'degraded']
+    - _aap_operator_pods_running | int != _aap_operator_pods_total | int

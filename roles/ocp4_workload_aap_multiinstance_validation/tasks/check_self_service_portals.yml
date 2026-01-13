@@ -1,0 +1,15 @@
+---
+# ---------------------------------------------------------------
+# Validate Self-Service Portals (Per User)
+# ---------------------------------------------------------------
+# For multi-user deployments, checks EACH user's self-service portal:
+# - Portal deployment exists and available
+# - Portal pods running
+# - Portal route exists and is accessible
+
+- name: Loop through all users to validate self-service portals
+  ansible.builtin.include_tasks: check_single_ssap.yml
+  loop: "{{ range(1, ocp4_workload_aap_multiinstance_validation_num_users | int + 1) | list }}"
+  loop_control:
+    loop_var: user_number
+    label: "{{ ocp4_workload_aap_multiinstance_validation_user_prefix }}{{ user_number }}"

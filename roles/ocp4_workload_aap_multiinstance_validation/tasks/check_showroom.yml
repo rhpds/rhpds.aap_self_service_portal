@@ -1,0 +1,168 @@
+---
+# ---------------------------------------------------------------
+# Validate Showroom Deployment
+# ---------------------------------------------------------------
+# Checks:
+# - Showroom deployment exists and available
+# - Showroom pods running
+# - Showroom route exists and is accessible
+
+- name: Check Showroom deployment
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ ocp4_workload_aap_multiinstance_validation_showroom_namespace }}"
+    name: "{{ ocp4_workload_aap_multiinstance_validation_showroom_deployment_name }}"
+  register: _showroom_deployment
+  ignore_errors: true
+
+- name: Parse Showroom deployment status
+  ansible.builtin.set_fact:
+    _showroom_deployment_available: >-
+      {{
+        (_showroom_deployment.resources[0].status.conditions | default([]) |
+         selectattr('type', 'equalto', 'Available') |
+         list | first).status | default('False')
+        if _showroom_deployment.resources | default([]) | length > 0
+        else 'NotFound'
+      }}
+    _showroom_replicas_ready: >-
+      {{
+        _showroom_deployment.resources[0].status.readyReplicas | default(0)
+        if _showroom_deployment.resources | default([]) | length > 0
+        else 0
+      }}
+    _showroom_replicas_desired: >-
+      {{
+        _showroom_deployment.resources[0].spec.replicas | default(1)
+        if _showroom_deployment.resources | default([]) | length > 0
+        else 1
+      }}
+
+- name: Check Showroom pods
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ ocp4_workload_aap_multiinstance_validation_showroom_namespace }}"
+    label_selectors:
+      - app=showroom
+  register: _showroom_pods
+  ignore_errors: true
+
+- name: Count running Showroom pods
+  ansible.builtin.set_fact:
+    _showroom_pods_running: >-
+      {{
+        _showroom_pods.resources | default([]) |
+        selectattr('status.phase', 'equalto', 'Running') |
+        selectattr('status.containerStatuses', 'defined') |
+        selectattr('status.containerStatuses', 'all', 'ready', true) |
+        list | length
+      }}
+    _showroom_pods_total: "{{ _showroom_pods.resources | default([]) | length }}"
+
+- name: Check Showroom route
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: "{{ ocp4_workload_aap_multiinstance_validation_showroom_namespace }}"
+  register: _showroom_routes
+  ignore_errors: true
+
+- name: Extract Showroom route
+  ansible.builtin.set_fact:
+    _showroom_route_url: >-
+      {{
+        'https://' + (_showroom_routes.resources | default([]) |
+         selectattr('metadata.name', 'equalto', ocp4_workload_aap_multiinstance_validation_showroom_deployment_name) |
+         list | first).spec.host
+        if (_showroom_routes.resources | default([]) |
+            selectattr('metadata.name', 'equalto', ocp4_workload_aap_multiinstance_validation_showroom_deployment_name) |
+            list | length > 0)
+        else ''
+      }}
+
+- name: Test Showroom route HTTP accessibility
+  ansible.builtin.uri:
+    url: "{{ _showroom_route_url }}"
+    method: GET
+    validate_certs: "{{ ocp4_workload_aap_multiinstance_validation_http_validate_certs }}"
+    status_code: "{{ ocp4_workload_aap_multiinstance_validation_http_success_codes }}"
+    timeout: "{{ ocp4_workload_aap_multiinstance_validation_http_timeout }}"
+  register: _showroom_http_check
+  ignore_errors: true
+  when: _showroom_route_url | length > 0
+
+# ---------------------------------------------------------------
+# Determine Showroom validation status
+# ---------------------------------------------------------------
+- name: Determine Showroom status
+  ansible.builtin.set_fact:
+    _showroom_status: >-
+      {{
+        'failed' if (
+          _showroom_deployment_available != 'True' or
+          _showroom_pods_running | int == 0 or
+          _showroom_route_url | length == 0
+        )
+        else 'degraded' if (
+          _showroom_http_check is failed or
+          _showroom_pods_running | int != _showroom_pods_total | int or
+          _showroom_replicas_ready | int != _showroom_replicas_desired | int
+        )
+        else 'healthy'
+      }}
+
+- name: Add Showroom validation result
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_results: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_results + [{
+          'component': 'Showroom',
+          'status': _showroom_status,
+          'namespace': ocp4_workload_aap_multiinstance_validation_showroom_namespace,
+          'details': {
+            'deployment_available': _showroom_deployment_available,
+            'replicas': _showroom_replicas_ready ~ '/' ~ _showroom_replicas_desired,
+            'pods': _showroom_pods_running ~ '/' ~ _showroom_pods_total,
+            'route': _showroom_route_url,
+            'http_accessible': (_showroom_http_check is success) if _showroom_route_url | length > 0 else false
+          }
+        }]
+      }}
+
+- name: Add Showroom issues if failed or degraded
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_issues: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_issues + [
+          'Showroom: deployment not available'
+        ]
+      }}
+  when:
+    - _showroom_status in ['failed', 'degraded']
+    - _showroom_deployment_available != 'True'
+
+- name: Add Showroom HTTP issues
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_issues: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_issues + [
+          'Showroom: route not HTTP accessible'
+        ]
+      }}
+  when:
+    - _showroom_status == 'degraded'
+    - _showroom_http_check is failed
+
+- name: Add Showroom pod issues
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_issues: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_issues + [
+          'Showroom: ' + _showroom_pods_running + '/' + _showroom_pods_total + ' pods running'
+        ]
+      }}
+  when:
+    - _showroom_status in ['failed', 'degraded']
+    - _showroom_pods_running | int != _showroom_pods_total | int

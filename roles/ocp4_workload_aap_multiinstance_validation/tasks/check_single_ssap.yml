@@ -1,0 +1,188 @@
+---
+# ---------------------------------------------------------------
+# Validate Single Self-Service Portal for One User
+# ---------------------------------------------------------------
+# Called by check_self_service_portals.yml for each user
+
+- name: Set current user variables for SSAP
+  ansible.builtin.set_fact:
+    _current_user: "{{ ocp4_workload_aap_multiinstance_validation_user_prefix }}{{ user_number }}"
+    _current_ssap_namespace: "{{ ocp4_workload_aap_multiinstance_validation_user_prefix }}{{ user_number }}{{ ocp4_workload_aap_multiinstance_validation_ssap_namespace_suffix }}"
+
+# ---------------------------------------------------------------
+# Check Self-Service Portal deployment
+# ---------------------------------------------------------------
+- name: Check Self-Service Portal deployment for {{ _current_user }}
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ _current_ssap_namespace }}"
+    name: "{{ ocp4_workload_aap_multiinstance_validation_ssap_deployment_name }}"
+  register: _ssap_deployment
+  ignore_errors: true
+
+- name: Parse Self-Service Portal deployment status for {{ _current_user }}
+  ansible.builtin.set_fact:
+    _ssap_deployment_available: >-
+      {{
+        (_ssap_deployment.resources[0].status.conditions | default([]) |
+         selectattr('type', 'equalto', 'Available') |
+         list | first).status | default('False')
+        if _ssap_deployment.resources | default([]) | length > 0
+        else 'NotFound'
+      }}
+    _ssap_replicas_ready: >-
+      {{
+        _ssap_deployment.resources[0].status.readyReplicas | default(0)
+        if _ssap_deployment.resources | default([]) | length > 0
+        else 0
+      }}
+    _ssap_replicas_desired: >-
+      {{
+        _ssap_deployment.resources[0].spec.replicas | default(1)
+        if _ssap_deployment.resources | default([]) | length > 0
+        else 1
+      }}
+
+# ---------------------------------------------------------------
+# Check Self-Service Portal pods
+# ---------------------------------------------------------------
+- name: Check Self-Service Portal pods for {{ _current_user }}
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ _current_ssap_namespace }}"
+    label_selectors:
+      - app.kubernetes.io/name=redhat-rhaap-portal
+  register: _ssap_pods
+  ignore_errors: true
+
+- name: Count running Self-Service Portal pods for {{ _current_user }}
+  ansible.builtin.set_fact:
+    _ssap_pods_running: >-
+      {{
+        _ssap_pods.resources | default([]) |
+        selectattr('status.phase', 'equalto', 'Running') |
+        selectattr('status.containerStatuses', 'defined') |
+        selectattr('status.containerStatuses', 'all', 'ready', true) |
+        list | length
+      }}
+    _ssap_pods_total: "{{ _ssap_pods.resources | default([]) | length }}"
+
+# ---------------------------------------------------------------
+# Check Self-Service Portal route
+# ---------------------------------------------------------------
+- name: Check Self-Service Portal route for {{ _current_user }}
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: "{{ _current_ssap_namespace }}"
+  register: _ssap_routes
+  ignore_errors: true
+
+- name: Extract Self-Service Portal route for {{ _current_user }}
+  ansible.builtin.set_fact:
+    _ssap_route_url: >-
+      {{
+        'https://' + (_ssap_routes.resources | default([]) |
+         selectattr('metadata.name', 'search', 'ssap') |
+         list | first).spec.host
+        if (_ssap_routes.resources | default([]) |
+            selectattr('metadata.name', 'search', 'ssap') |
+            list | length > 0)
+        else ''
+      }}
+
+# ---------------------------------------------------------------
+# Test Self-Service Portal route HTTP accessibility
+# ---------------------------------------------------------------
+- name: Test Self-Service Portal route HTTP accessibility for {{ _current_user }}
+  ansible.builtin.uri:
+    url: "{{ _ssap_route_url }}"
+    method: GET
+    validate_certs: "{{ ocp4_workload_aap_multiinstance_validation_http_validate_certs }}"
+    status_code: "{{ ocp4_workload_aap_multiinstance_validation_http_success_codes }}"
+    timeout: "{{ ocp4_workload_aap_multiinstance_validation_http_timeout }}"
+  register: _ssap_http_check
+  ignore_errors: true
+  when: _ssap_route_url | length > 0
+
+# ---------------------------------------------------------------
+# Determine Self-Service Portal status for this user
+# ---------------------------------------------------------------
+- name: Determine Self-Service Portal status for {{ _current_user }}
+  ansible.builtin.set_fact:
+    _ssap_status: >-
+      {{
+        'failed' if (
+          _ssap_deployment_available != 'True' or
+          _ssap_pods_running | int == 0 or
+          _ssap_route_url | length == 0
+        )
+        else 'degraded' if (
+          _ssap_http_check is failed or
+          _ssap_pods_running | int != _ssap_pods_total | int or
+          _ssap_replicas_ready | int != _ssap_replicas_desired | int
+        )
+        else 'healthy'
+      }}
+
+# ---------------------------------------------------------------
+# Add Self-Service Portal validation result
+# ---------------------------------------------------------------
+- name: Add Self-Service Portal validation result for {{ _current_user }}
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_results: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_results + [{
+          'component': 'Self-Service Portal - ' + _current_user,
+          'status': _ssap_status,
+          'namespace': _current_ssap_namespace,
+          'details': {
+            'deployment_available': _ssap_deployment_available,
+            'replicas': _ssap_replicas_ready ~ '/' ~ _ssap_replicas_desired,
+            'pods': _ssap_pods_running ~ '/' ~ _ssap_pods_total,
+            'route': _ssap_route_url,
+            'http_accessible': (_ssap_http_check is success) if _ssap_route_url | length > 0 else false
+          }
+        }]
+      }}
+
+# ---------------------------------------------------------------
+# Add issues if failed or degraded
+# ---------------------------------------------------------------
+- name: Add Self-Service Portal issues for {{ _current_user }}
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_issues: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_issues + [
+          _current_user + ' SSAP: deployment not available'
+        ]
+      }}
+  when:
+    - _ssap_status in ['failed', 'degraded']
+    - _ssap_deployment_available != 'True'
+
+- name: Add Self-Service Portal HTTP issues for {{ _current_user }}
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_issues: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_issues + [
+          _current_user + ' SSAP: route not HTTP accessible'
+        ]
+      }}
+  when:
+    - _ssap_status == 'degraded'
+    - _ssap_http_check is failed
+
+- name: Add Self-Service Portal pod issues for {{ _current_user }}
+  ansible.builtin.set_fact:
+    _ocp4_workload_aap_multiinstance_validation_issues: >-
+      {{
+        _ocp4_workload_aap_multiinstance_validation_issues + [
+          _current_user + ' SSAP: ' + _ssap_pods_running + '/' + _ssap_pods_total + ' pods running'
+        ]
+      }}
+  when:
+    - _ssap_status in ['failed', 'degraded']
+    - _ssap_pods_running | int != _ssap_pods_total | int
