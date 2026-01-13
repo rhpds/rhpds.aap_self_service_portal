@@ -36,7 +36,7 @@
     kind: Pod
     namespace: "{{ ocp4_workload_aap_multiinstance_validation_keycloak_namespace }}"
     label_selectors:
-      - control-plane=controller-manager
+      - name=rhbk-operator
   register: _keycloak_operator_pods
   ignore_errors: true
 
