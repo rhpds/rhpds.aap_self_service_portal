@@ -78,7 +78,6 @@
         _aap_controller_pods.resources | default([]) |
         selectattr('status.phase', 'equalto', 'Running') |
         selectattr('status.containerStatuses', 'defined') |
-        selectattr('status.containerStatuses', 'all', 'ready', true) |
         list | length
       }}
     _controller_pods_total: "{{ _aap_controller_pods.resources | default([]) | length }}"
@@ -105,7 +104,6 @@
         _aap_eda_pods.resources | default([]) |
         selectattr('status.phase', 'equalto', 'Running') |
         selectattr('status.containerStatuses', 'defined') |
-        selectattr('status.containerStatuses', 'all', 'ready', true) |
         list | length
       }}
     _eda_pods_total: "{{ _aap_eda_pods.resources | default([]) | length }}"

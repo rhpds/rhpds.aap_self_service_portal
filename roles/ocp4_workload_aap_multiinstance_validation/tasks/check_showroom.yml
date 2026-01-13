@@ -56,7 +56,6 @@
         _showroom_pods.resources | default([]) |
         selectattr('status.phase', 'equalto', 'Running') |
         selectattr('status.containerStatuses', 'defined') |
-        selectattr('status.containerStatuses', 'all', 'ready', true) |
         list | length
       }}
     _showroom_pods_total: "{{ _showroom_pods.resources | default([]) | length }}"
