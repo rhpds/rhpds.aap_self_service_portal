@@ -17,6 +17,7 @@
     scm_branch: "{{ item.scm_branch | default('main') }}"
     default_environment: "{{ item.default_environment | default('Default execution environment') }}"
     state: present
+    wait: false  # Don't wait for SCM sync - speeds up multi-user deployments
     controller_host: "{{ aap_selfservice_custom_controller_url }}"
     controller_username: "{{ aap_selfservice_custom_admin_username }}"
     controller_password: "{{ aap_selfservice_custom_admin_password }}"
