@@ -51,7 +51,7 @@
     kind: Pod
     namespace: "{{ _showroom_namespace }}"
     label_selectors:
-      - app={{ _showroom_deployment }}
+      - app.kubernetes.io/name=showroom
   register: _showroom_pods
   ignore_errors: true
 
