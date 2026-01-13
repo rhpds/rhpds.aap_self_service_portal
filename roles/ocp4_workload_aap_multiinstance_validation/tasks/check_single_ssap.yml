@@ -53,7 +53,7 @@
     kind: Pod
     namespace: "{{ _current_ssap_namespace }}"
     label_selectors:
-      - app.kubernetes.io/name=redhat-rhaap-portal
+      - app.kubernetes.io/name=rhaap-portal
   register: _ssap_pods
   ignore_errors: true
 
