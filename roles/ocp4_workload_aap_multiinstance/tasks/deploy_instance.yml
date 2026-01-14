@@ -50,10 +50,21 @@
     wait_timeout: 1800
   register: r_aap_instance
 
+- name: Get routes for AAP instance
+  kubernetes.core.k8s_info:
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: "{{ _instance_namespace }}"
+  register: r_instance_routes
+
 - name: Extract instance URLs
   ansible.builtin.set_fact:
-    _controller_url: "{{ r_aap_instance.resources[0].status.URL | default('') }}"
-    _controller_hostname: "{{ r_aap_instance.resources[0].status.URL | default('') | urlsplit('hostname') }}"
+    # AAP 2.6: Extract both gateway route (for OAuth/tokens) and controller route (for manifest/controller API)
+    # Gateway route name matches the AAP instance name (without -controller suffix)
+    # Controller route name has -controller suffix
+    _gateway_url: "https://{{ (r_instance_routes.resources | selectattr('metadata.name', 'equalto', _instance_name) | list | first).spec.host }}"
+    _controller_url: "https://{{ (r_instance_routes.resources | selectattr('spec.to.name', 'search', 'controller') | list | first).spec.host }}"
+    _controller_hostname: "{{ (r_instance_routes.resources | selectattr('spec.to.name', 'search', 'controller') | list | first).spec.host }}"
 
 # -------------------------------------------------------------------
 # Create self-service portal namespace
@@ -76,6 +87,8 @@
     - aap_instance_enable_controller | bool
   ansible.builtin.include_tasks: inject_manifest.yml
   vars:
+    # AAP 2.6: Use gateway route for health check, controller route for manifest injection
+    manifest_gateway_url: "{{ _gateway_url }}"
     manifest_controller_url: "{{ _controller_url }}"
     manifest_admin_password: "{{ _aap_instance_admin_password }}"
 
