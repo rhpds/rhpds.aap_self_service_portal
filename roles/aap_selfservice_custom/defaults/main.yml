@@ -202,7 +202,7 @@ aap_selfservice_custom_job_templates:
           max: 50
           default: rhel9
 
-  - name: Cloud/AWS Create VCP
+  - name: Cloud/AWS Create VPC
     description: Run a job template to create an AWS VPC, and all its required networking
     job_type: run
     organization: Default

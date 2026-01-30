@@ -112,7 +112,7 @@ All users use the workshop `common_password`.
 1. Cloud/AWS AWS Provisioning Workflow
 2. Cloud/AWS Create RHEL10 instance
 3. Cloud/AWS Create RHEL9 instance
-4. Cloud/AWS Create VCP
+4. Cloud/AWS Create VPC
 5. Cloud/AWS Snapshot ec2 instance
 
 #### Network Templates (4)
