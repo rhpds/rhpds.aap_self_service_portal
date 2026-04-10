@@ -20,6 +20,7 @@
     labels: "{{ item.labels | default([]) }}"
     ask_inventory_on_launch: "{{ item.ask_inventory_on_launch | default(false) }}"
     ask_credential_on_launch: "{{ item.ask_credential_on_launch | default(false) }}"
+    ask_variables_on_launch: "{{ item.ask_variables_on_launch | default(false) }}"
     survey_enabled: "{{ item.survey_enabled | default(false) }}"
     survey_spec: "{{ item.survey_spec | default(omit) }}"
     state: present
