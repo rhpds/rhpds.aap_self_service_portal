@@ -566,6 +566,7 @@ aap_selfservice_custom_job_templates:
       - custom
     ask_inventory_on_launch: true
     ask_credential_on_launch: true
+    ask_variables_on_launch: true
 
 # -------------------------------------------------------------------
 # Behavior Settings
