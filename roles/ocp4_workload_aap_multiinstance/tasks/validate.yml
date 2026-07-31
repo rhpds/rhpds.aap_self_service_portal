@@ -4,7 +4,7 @@
 - name: Validate AAP version
   ansible.builtin.assert:
     that:
-      - aap_instance_version in ['2.5', '2.6']
+      - aap_instance_version in ['2.5', '2.6', '2.7']
     fail_msg: "aap_instance_version must be either '2.5' or '2.6'"
     success_msg: "AAP version {{ aap_instance_version }} is valid"
 
