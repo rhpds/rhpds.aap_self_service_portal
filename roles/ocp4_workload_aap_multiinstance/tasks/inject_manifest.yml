@@ -3,8 +3,8 @@
 # Inject AAP Manifest into Controller
 # ---------------------------------------------------------------
 # Variables expected:
-#   manifest_gateway_url: Gateway URL (for health check)
-#   manifest_controller_url: Controller URL (for manifest upload)
+#   manifest_gateway_url: Gateway URL (for health check and AAP 2.7+ upload)
+#   manifest_controller_url: Controller URL (for manifest upload on AAP < 2.7)
 #   manifest_admin_password: Admin password
 
 - name: Generate unique manifest filename
@@ -46,7 +46,89 @@
   retries: 30
   delay: 10
 
+# ---------------------------------------------------------------
+# AAP 2.7+: gateway-native manifest upload
+# ansible.controller.license authenticates via /api/controller/v2/tokens/,
+# which does not exist on the platform gateway in 2.7.
+# ---------------------------------------------------------------
+- name: Read manifest file for gateway upload
+  when: aap_instance_version is version('2.7', '>=')
+  ansible.builtin.slurp:
+    src: "{{ _manifest_temp_file }}"
+  register: _manifest_content
+
+- name: Create gateway token for manifest upload
+  when: aap_instance_version is version('2.7', '>=')
+  ansible.builtin.uri:
+    url: "{{ manifest_gateway_url }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ aap_instance_admin_username }}"
+    password: "{{ manifest_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      description: "Lab manifest injection token"
+      scope: "write"
+    status_code: [200, 201]
+  register: _manifest_gateway_token
+  no_log: "{{ aap_instance_no_log }}"
+
+- name: Check existing AAP license configuration
+  when: aap_instance_version is version('2.7', '>=')
+  ansible.builtin.uri:
+    url: "{{ manifest_gateway_url }}/api/controller/v2/config/"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ _manifest_gateway_token.json.token }}"
+    validate_certs: false
+    status_code: 200
+  register: _manifest_existing_config
+
+- name: Determine if manifest install is needed
+  when: aap_instance_version is version('2.7', '>=')
+  ansible.builtin.set_fact:
+    _manifest_install_needed: >-
+      {{
+        aap_instance_manifest_force | default(false) | bool or
+        not (
+          _manifest_existing_config.json.license_info is defined and
+          (_manifest_existing_config.json.license_info.instance_count | default(0) | int) > 0 and
+          not (_manifest_existing_config.json.license_info.trial | default(true) | bool)
+        )
+      }}
+
+- name: Upload manifest to AAP via gateway API
+  when:
+    - aap_instance_version is version('2.7', '>=')
+    - _manifest_install_needed | bool
+  ansible.builtin.uri:
+    url: "{{ manifest_gateway_url }}/api/controller/v2/config/"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _manifest_gateway_token.json.token }}"
+    validate_certs: false
+    body_format: json
+    body:
+      manifest: "{{ _manifest_content.content }}"
+    status_code: 200
+  register: _manifest_upload_result
+  until: _manifest_upload_result.status == 200
+  retries: 5
+  delay: 10
+
+- name: Skip manifest upload when already licensed
+  when:
+    - aap_instance_version is version('2.7', '>=')
+    - not (_manifest_install_needed | bool)
+  ansible.builtin.debug:
+    msg: "AAP instance is already licensed; skipping manifest upload"
+
+# ---------------------------------------------------------------
+# AAP < 2.7: use ansible.controller.license with controller route
+# ---------------------------------------------------------------
 - name: Inject AAP Controller manifest
+  when: aap_instance_version is version('2.7', '<')
   ansible.controller.license:
     manifest: "{{ _manifest_temp_file }}"
     controller_host: "{{ _manifest_upload_hostname }}"
