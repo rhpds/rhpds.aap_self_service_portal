@@ -19,9 +19,21 @@
     password: "{{ aap_instance_manifest.password | default(omit) }}"
   register: r_manifest_download
 
-- name: Extract hostname from controller URL
+- name: Determine manifest upload hostname
   ansible.builtin.set_fact:
-    _manifest_controller_hostname: "{{ manifest_controller_url | urlsplit('hostname') }}"
+    # AAP 2.7+: all API access (including license upload) goes through platform gateway.
+    # AAP 2.6: prefer controller route when available, fall back to gateway.
+    # AAP 2.5: use controller route only.
+    _manifest_upload_hostname: >-
+      {{
+        manifest_gateway_url | urlsplit('hostname')
+        if aap_instance_version is version('2.7', '>=')
+        else (
+          manifest_controller_url | urlsplit('hostname')
+          if (manifest_controller_url | default('') | urlsplit('hostname') | lower) not in ['', 'not ready']
+          else manifest_gateway_url | urlsplit('hostname')
+        )
+      }}
 
 - name: Wait for AAP gateway to be fully ready before manifest injection
   ansible.builtin.uri:
@@ -37,7 +49,7 @@
 - name: Inject AAP Controller manifest
   ansible.controller.license:
     manifest: "{{ _manifest_temp_file }}"
-    controller_host: "{{ _manifest_controller_hostname }}"
+    controller_host: "{{ _manifest_upload_hostname }}"
     controller_username: "{{ aap_instance_admin_username }}"
     controller_password: "{{ manifest_admin_password }}"
     validate_certs: false
@@ -53,4 +65,4 @@
 
 - name: Print manifest injection success
   ansible.builtin.debug:
-    msg: "Manifest successfully injected into {{ manifest_controller_url }}"
+    msg: "Manifest successfully injected into https://{{ _manifest_upload_hostname }}"

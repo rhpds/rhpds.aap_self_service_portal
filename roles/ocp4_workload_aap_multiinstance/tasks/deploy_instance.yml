@@ -59,12 +59,16 @@
 
 - name: Extract instance URLs
   ansible.builtin.set_fact:
-    # AAP 2.6: Extract both gateway route (for OAuth/tokens) and controller route (for manifest/controller API)
-    # Gateway route name matches the AAP instance name (without -controller suffix)
-    # Controller route name has -controller suffix
+    # AAP 2.6+: gateway route is the primary API endpoint.
+    # AAP 2.6: controller route may still exist for legacy manifest upload.
+    # AAP 2.7: controller route is removed; all API access goes through gateway.
     _gateway_url: "https://{{ (r_instance_routes.resources | selectattr('metadata.name', 'equalto', _instance_name) | list | first).spec.host }}"
-    _controller_url: "https://{{ (r_instance_routes.resources | selectattr('spec.to.name', 'search', 'controller') | list | first).spec.host }}"
-    _controller_hostname: "{{ (r_instance_routes.resources | selectattr('spec.to.name', 'search', 'controller') | list | first).spec.host }}"
+    _controller_url: >-
+      {{
+        'https://' ~ (r_instance_routes.resources | selectattr('spec.to.name', 'search', 'controller') | list | first).spec.host
+        if (r_instance_routes.resources | selectattr('spec.to.name', 'search', 'controller') | list | length > 0)
+        else 'https://' ~ (r_instance_routes.resources | selectattr('metadata.name', 'equalto', _instance_name) | list | first).spec.host
+      }}
 
 # -------------------------------------------------------------------
 # Create self-service portal namespace
@@ -132,6 +136,7 @@
     aap_instance_info:
       name: "{{ _instance_name }}"
       namespace: "{{ _instance_namespace }}"
-      controller_url: "{{ _controller_url }}"
+      controller_url: "{{ _gateway_url if aap_instance_version is version('2.7', '>=') else _controller_url }}"
+      gateway_url: "{{ _gateway_url }}"
       admin_username: "{{ aap_instance_admin_username }}"
       admin_password: "{{ _aap_instance_admin_password }}"

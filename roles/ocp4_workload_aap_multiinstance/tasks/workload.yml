@@ -113,12 +113,17 @@
     - ocp4_workload_aap_multiinstance_grant_user_access | bool
   ansible.builtin.include_tasks: grant_user_access.yml
 
-# Wait for AAP Controller API to be ready before deploying portal
-- name: Wait for AAP Controller API to be ready (multi-user)
+# Wait for AAP API to be ready before deploying portal
+- name: Wait for AAP API to be ready (multi-user)
   when: ocp4_workload_aap_multiinstance_multi_user | bool
   ansible.builtin.uri:
-    # AAP 2.6: Use controller route for controller API endpoint
-    url: "https://{{ item.controller_route }}/api/v2/ping/"
+    # AAP 2.7+: gateway only. AAP 2.6 and earlier: controller ping still works.
+    url: >-
+      {{
+        'https://' ~ item.route ~ '/api/gateway/v1/'
+        if aap_instance_version is version('2.7', '>=')
+        else 'https://' ~ item.controller_route ~ '/api/v2/ping/'
+      }}
     method: GET
     validate_certs: false
     status_code: 200
@@ -171,11 +176,16 @@
     seconds: 120
     prompt: "Waiting for self-service portals to start up..."
 
-# Wait for AAP Controller API to be ready (single instance)
-- name: Wait for AAP Controller API to be ready (single instance)
+# Wait for AAP API to be ready (single instance)
+- name: Wait for AAP API to be ready (single instance)
   when: not ocp4_workload_aap_multiinstance_multi_user | bool
   ansible.builtin.uri:
-    url: "{{ _aap_deployment_info.controller_url }}/api/v2/ping/"
+    url: >-
+      {{
+        _aap_deployment_info.gateway_url | default(_aap_deployment_info.controller_url) ~ '/api/gateway/v1/'
+        if aap_instance_version is version('2.7', '>=')
+        else _aap_deployment_info.controller_url ~ '/api/v2/ping/'
+      }}
     method: GET
     validate_certs: false
     status_code: 200

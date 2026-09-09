@@ -172,7 +172,7 @@
     # AAP 2.6: Extract both gateway route (for OAuth/tokens) and controller route (for manifest/controller API)
     # Gateway route name matches the AAP instance name (without -controller suffix)
     # Controller route name has -controller suffix
-    _user_access_info: "{{ _user_access_info | default([]) + [{'user': item.item.user, 'namespace': item.item.namespace, 'route': (item.resources | selectattr('metadata.name', 'equalto', item.item.name) | list | first).spec.host if (item.resources | selectattr('metadata.name', 'equalto', item.item.name) | list | length > 0) else 'Not ready', 'controller_route': (item.resources | selectattr('spec.to.name', 'search', 'controller') | list | first).spec.host if (item.resources | selectattr('spec.to.name', 'search', 'controller') | list | length > 0) else 'Not ready', 'password': _aap_user_passwords[item.item.namespace]}] }}"
+    _user_access_info: "{{ _user_access_info | default([]) + [{'user': item.item.user, 'namespace': item.item.namespace, 'route': (item.resources | selectattr('metadata.name', 'equalto', item.item.name) | list | first).spec.host if (item.resources | selectattr('metadata.name', 'equalto', item.item.name) | list | length > 0) else 'Not ready', 'controller_route': (item.resources | selectattr('spec.to.name', 'search', 'controller') | list | first).spec.host if (item.resources | selectattr('spec.to.name', 'search', 'controller') | list | length > 0) else ((item.resources | selectattr('metadata.name', 'equalto', item.item.name) | list | first).spec.host if (item.resources | selectattr('metadata.name', 'equalto', item.item.name) | list | length > 0) else 'Not ready'), 'password': _aap_user_passwords[item.item.namespace]}] }}"
   loop: "{{ r_routes.results }}"
   no_log: false
 
