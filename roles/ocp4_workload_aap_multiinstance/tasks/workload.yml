@@ -163,7 +163,6 @@
     aap_ssl_verify: false
     aap_oauth_client_name: "Self Service Portal"
     aap_organization: "Default"
-    helm_chart_version: "2.0.3"
   loop: "{{ _aap_multi_user_info }}"
   loop_control:
     label: "{{ item.user }}"
@@ -222,7 +221,6 @@
     aap_ssl_verify: false
     aap_oauth_client_name: "Self Service Portal"
     aap_organization: "Default"
-    helm_chart_version: "2.0.3"
   when: not ocp4_workload_aap_multiinstance_multi_user | bool
 
 # Wait for portal to start up before showing URL to user (single instance)

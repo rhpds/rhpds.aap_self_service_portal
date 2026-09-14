@@ -91,7 +91,7 @@ Key variables (see `roles/self-service/defaults/main.yml` for full list):
 | `controller_password` | AAP admin password | Required |
 | `openshift_namespace` | OpenShift namespace for portal | `ssap` |
 | `openshift_base_domain` | Cluster base domain | Auto-detected |
-| `helm_chart_version` | Portal Helm chart version | `2.0.3` |
+| `helm_chart_version` | Portal Helm chart version | `2.2.4` |
 | `aap_ssl_verify` | Verify AAP SSL certificates | `false` |
 
 ## OpenShift Base Domain Detection

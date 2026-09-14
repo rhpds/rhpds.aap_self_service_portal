@@ -4,7 +4,7 @@
 plugin_root_dir: "/tmp/aap-ssap-plugins"
 helm_values: "{{ role_path }}/files/helm/values.yml"
 openshift_namespace: ssap
-helm_chart_version: "2.0.3"
+helm_chart_version: "2.2.4"
 helm_repo_url: "https://charts.openshift.io"
 helm_repo_name: "openshift-helm-charts"
 helm_chart_name: "redhat-rhaap-portal"
