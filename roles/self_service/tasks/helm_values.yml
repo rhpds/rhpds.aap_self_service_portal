@@ -55,9 +55,10 @@
     set_values:
       - value: redhat-developer-hub.global.clusterRouterBase={{ openshift_base_domain }}
         value_type: string
+      - value: redhat-developer-hub.upstream.backstage.image.tag={{ rhdh_image_tag }}
+        value_type: string
       - value: redhat-developer-hub.upstream.backstage.appConfig.auth.providers.rhaap.production.checkSSL={{ aap_ssl_verify }}
         value_type: string
       - value: redhat-developer-hub.upstream.backstage.appConfig.ansible.rhaap.checkSSL={{ aap_ssl_verify }}
         value_type: string
   tags: helm
-
