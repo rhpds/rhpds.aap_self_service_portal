@@ -8,18 +8,18 @@ redhat-developer-hub:
         - disabled: false
           package: ./dynamic-plugins/dist/backstage-community-plugin-rbac
         - disabled: false
-          integrity: '{{- include "plugins.integrity.scaffolder" . }}'
-          package: '{{- include "plugins.load.scaffolder" . }}'
+          integrity: 'sha512-Ep0P021YCcOnXNZ8Tn135G7UtijicQLLP0N5vFDMROPvodSgKV4rMPjr6qBllQtROngM3zqdLlCI5toJL1GI2g=='
+          package: 'http://plugin-registry:8080/ansible-plugin-scaffolder-backend-module-backstage-rhaap-dynamic-2.2.7.tgz'
           pluginConfig:
             dynamicPlugins:
               backend:
                 ansible.plugin-scaffolder-backend-module-backstage-rhaap: null
         - disabled: false
-          integrity: '{{- include "plugins.integrity.catalog" . }}'
-          package: '{{- include "plugins.load.catalog" . }}'
+          integrity: 'sha512-70AkCA3anDSM4rb8JKZ60BLGSccZEs1Vh7tVEuKtIqklL1ff7C77/z1KL2YYoW0kbBEZ+ifTkdFFxscUhdBc6w=='
+          package: 'http://plugin-registry:8080/ansible-backstage-plugin-catalog-backend-module-rhaap-dynamic-2.2.7.tgz'
         - disabled: false
-          integrity: '{{- include "plugins.integrity.self-service" . }}'
-          package: '{{- include "plugins.load.self-service" . }}'
+          integrity: 'sha512-1CsZ5u06J3WjpxPzrwcKMzpfEmSfFOkwGgs3zOZfIYuCbtLdC+yAJsPpTs3PAMHsojUqLH59WX27hmxNKIMjKA=='
+          package: 'http://plugin-registry:8080/ansible-plugin-backstage-self-service-dynamic-2.2.7.tgz'
           pluginConfig:
             dynamicPlugins:
               frontend:
@@ -42,8 +42,8 @@ redhat-developer-hub:
                   signInPage:
                     importName: SignInPage
         - disabled: false
-          integrity: '{{- include "plugins.integrity.auth" . }}'
-          package: '{{- include "plugins.load.auth" . }}'
+          integrity: 'sha512-6oFAsgBclqDOFWrWZZV7XsYT5gwXZIPopQwmrUaPSWtvCeDhqAQ7r19FTw44ecT+GJt/I0YANVorf8ylGF0Amw=='
+          package: 'http://plugin-registry:8080/ansible-backstage-plugin-auth-backend-module-rhaap-provider-dynamic-2.2.7.tgz'
           pluginConfig: {}
         - disabled: false
           package: >-
