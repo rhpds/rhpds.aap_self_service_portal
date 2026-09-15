@@ -330,5 +330,5 @@ redhat-developer-hub:
       image:
         registry: registry.redhat.io
         repository: rhdh/rhdh-hub-rhel9
-        tag: 1.6.3
+        tag: 1.10
     nameOverride: rhaap-portal
