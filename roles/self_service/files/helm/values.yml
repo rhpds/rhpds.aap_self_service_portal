@@ -24,23 +24,63 @@ redhat-developer-hub:
             dynamicPlugins:
               frontend:
                 ansible.plugin-backstage-self-service:
+                  signInPage:
+                    importName: SignInPage
+                  providerSettings:
+                    - title: RHAAP
+                      description: Sign in with RHAAP
+                      provider: ansible.auth.rhaap
+                  scaffolderFieldExtensions:
+                    - importName: AAPTokenFieldExtension
+                    - importName: AAPResourcePickerExtension
+                    - importName: AdditionalBuildStepsPickerFieldExtension
+                    - importName: BaseImagePickerFieldExtension
+                    - importName: CollectionsPickerFieldExtension
+                    - importName: EEFileNamePickerFieldExtension
+                    - importName: FileUploadPickerFieldExtension
+                    - importName: PackagesPickerFieldExtension
+                    - importName: MCPServersPickerFieldExtension
+                    - importName: ScmSelectorFieldExtension
                   dynamicRoutes:
                     - importName: LandingPage
                       path: /
                     - importName: SelfServicePage
                       path: /self-service
+                    - importName: TemplatesPage
+                      path: /self-service/*
+                      menuItem:
+                        importName: TemplatesSidebarItem
+                    - importName: HistoryPage
+                      path: /self-service/create/tasks
+                      menuItem:
+                        importName: HistorySidebarItem
+                    - importName: EEPage
+                      path: /self-service/ee/*
+                    - importName: EEPage
+                      path: /self-service/ee
+                      menuItem:
+                        importName: EEBuilderSidebarItem
+                    - importName: CollectionsPage
+                      path: /self-service/collections
+                      menuItem:
+                        importName: CollectionsSidebarItem
+                    - importName: CollectionsPage
+                      path: /self-service/collections/*
+                    - importName: GitRepositoriesPage
+                      path: /self-service/repositories
+                      menuItem:
+                        importName: GitRepositoriesSidebarItem
+                    - importName: GitRepositoriesPage
+                      path: /self-service/repositories/*
                   mountPoints:
-                    - importName: LocationListener
-                      mountPoint: application/listener
-                  providerSettings:
-                    - description: Sign in with RHAAP
-                      provider: ansible.auth.rhaap
-                      title: RHAAP
-                  scaffolderFieldExtensions:
-                    - importName: AAPTokenFieldExtension
-                    - importName: AAPResourcePickerExtension
-                  signInPage:
-                    importName: SignInPage
+                    - mountPoint: application/listener
+                      importName: LocationListener
+                    - mountPoint: application/listener
+                      importName: AppThemeFixer
+                    - importName: AAPLogoutButton
+                      mountPoint: global.header/profile
+                      config:
+                        priority: 100
         - disabled: false
           integrity: 'sha512-6oFAsgBclqDOFWrWZZV7XsYT5gwXZIPopQwmrUaPSWtvCeDhqAQ7r19FTw44ecT+GJt/I0YANVorf8ylGF0Amw=='
           package: 'http://plugin-registry:8080/ansible-backstage-plugin-auth-backend-module-rhaap-provider-dynamic-2.2.7.tgz'
@@ -101,6 +141,11 @@ redhat-developer-hub:
           import:
             entityFilename: catalog-info.yaml
             pullRequestBranchName: backstage-integration
+          locations:
+            - type: url
+              target: https://github.com/ansible/ansible-rhdh-templates/blob/v2.0.1/templates/ee-start-from-scratch.yaml
+              rules:
+                - allow: [Template]
           orphanStrategy: delete
           pollingInterval:
             seconds: 1
@@ -124,6 +169,16 @@ redhat-developer-hub:
                         minutes: 3
                       timeout:
                         seconds: 30
+                  ansibleGitContents:
+                    enabled: true
+                    schedule:
+                      frequency:
+                        minutes: 120
+                      timeout:
+                        minutes: 30
+                    providers:
+                      github: []
+                      gitlab: []
           rules:
             - allow:
                 - Component
