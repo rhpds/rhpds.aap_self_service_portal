@@ -187,6 +187,8 @@ redhat-developer-hub:
                   priority: 110
                   title: History
                   to: /self-service/create/tasks
+                default.ee:
+                  enabled: true
             internal.plugin-dynamic-plugins-info:
               appIcons:
                 - importName: PluginsInfoIcon
