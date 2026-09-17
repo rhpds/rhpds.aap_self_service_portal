@@ -5,6 +5,8 @@ redhat-developer-hub:
       _production: true
     dynamic:
       plugins:
+        - disabled: true
+          package: ./dynamic-plugins/dist/red-hat-developer-hub-backstage-plugin-quickstart
         - disabled: false
           package: ./dynamic-plugins/dist/backstage-community-plugin-rbac
         - disabled: false
