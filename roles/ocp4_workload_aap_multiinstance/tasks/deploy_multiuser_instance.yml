@@ -27,4 +27,5 @@
   failed_when:
     - r_aap_instance.resources | length > 0
     - r_aap_instance.resources[0].status.conditions is defined
-    - (r_aap_instance.resources[0].status.conditions | selectattr('type', 'equalto', 'Failure') | first | default({'status': 'False'})).status == "True"
+    - (r_aap_instance.resources[0].status.conditions | selectattr('type', 'equalto', 'Failure') | list | length > 0)
+    - (r_aap_instance.resources[0].status.conditions | selectattr('type', 'equalto', 'Failure') | first).status == "True"
