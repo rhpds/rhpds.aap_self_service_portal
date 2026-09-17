@@ -127,11 +127,34 @@
 - name: Display deployment timing
   ansible.builtin.debug:
     msg:
-      - "Deploying {{ aap_instance_num_users }} AAP instances sequentially"
-      - "Wait timeout per instance: {{ (_aap_wait_retries | int * _aap_wait_delay | int / 60) | int }} minutes ({{ _aap_wait_retries }} retries x {{ _aap_wait_delay }}s)"
+      - "Deploying {{ aap_instance_num_users }} AAP instances in parallel"
+      - "Wait timeout: {{ (_aap_wait_retries | int * _aap_wait_delay | int / 60) | int }} minutes ({{ _aap_wait_retries }} retries x {{ _aap_wait_delay }}s)"
 
-- name: Deploy and wait for each AAP instance (sequential)
-  ansible.builtin.include_tasks: deploy_multiuser_instance.yml
+- name: Deploy AAP instances for all users (parallel)
+  kubernetes.core.k8s:
+    state: present
+    template: aap_instance.yaml.j2
+  vars:
+    instance_name: "{{ item.name }}"
+    instance_namespace: "{{ item.namespace }}"
+  loop: "{{ _aap_instance_namespaces }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Wait for all AAP instances to be ready (parallel)
+  kubernetes.core.k8s_info:
+    api_version: aap.ansible.com/v1alpha1
+    kind: AnsibleAutomationPlatform
+    name: "{{ item.name }}"
+    namespace: "{{ item.namespace }}"
+  register: r_aap_instances
+  until:
+    - r_aap_instances.resources | length > 0
+    - r_aap_instances.resources[0].status.conditions is defined
+    - r_aap_instances.resources[0].status.conditions | selectattr('type', 'equalto', 'Successful') | list | length > 0
+    - (r_aap_instances.resources[0].status.conditions | selectattr('type', 'equalto', 'Successful') | first).status == "True"
+  retries: "{{ _aap_wait_retries | int }}"
+  delay: "{{ _aap_wait_delay | int }}"
   loop: "{{ _aap_instance_namespaces }}"
   loop_control:
     label: "{{ item.name }}"
