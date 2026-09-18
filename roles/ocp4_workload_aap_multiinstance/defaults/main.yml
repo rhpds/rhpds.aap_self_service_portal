@@ -121,15 +121,18 @@ ocp4_workload_aap_multiinstance_eda_cluster_role: cluster-admin
 # Hub Settings
 # ---------------------------------------------------------------
 ocp4_workload_aap_multiinstance_hub_replicas: 1
-# Pod replica counts — must be 1 with ReadWriteOnce file storage (CNV default)
+# Pod replica counts (separate from gunicorn worker counts below)
+# Keep at 1 for workshop sizing; RWX storage allows raising these if needed
 ocp4_workload_aap_multiinstance_hub_content_replicas: 1
 ocp4_workload_aap_multiinstance_hub_worker_replicas: 1
 # Gunicorn worker processes inside each Hub pod (not pod replica count)
 ocp4_workload_aap_multiinstance_hub_content_workers: 2
 ocp4_workload_aap_multiinstance_hub_api_workers: 2
 ocp4_workload_aap_multiinstance_hub_file_storage_size: 100Gi
-ocp4_workload_aap_multiinstance_hub_file_storage_access_mode: ReadWriteOnce
-ocp4_workload_aap_multiinstance_hub_file_storage_class: ""
+# Hub file storage is shared by api/content/worker pods — Red Hat requires RWX
+# (or S3/Azure). RWO causes Multi-Attach when pods land on different nodes.
+ocp4_workload_aap_multiinstance_hub_file_storage_access_mode: ReadWriteMany
+ocp4_workload_aap_multiinstance_hub_file_storage_class: ocs-external-storagecluster-cephfs
 
 ocp4_workload_aap_multiinstance_hub_resource_requirements:
   requests:
