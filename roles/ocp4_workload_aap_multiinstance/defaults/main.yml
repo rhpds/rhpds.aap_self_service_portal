@@ -51,7 +51,8 @@ ocp4_workload_aap_multiinstance_catalog_snapshot_image_tag: v4.19_2025_09_29
 # ---------------------------------------------------------------
 ocp4_workload_aap_multiinstance_enable_controller: true
 ocp4_workload_aap_multiinstance_enable_eda: true
-ocp4_workload_aap_multiinstance_enable_hub: false
+# Required for EE builder / Collections in the self-service portal workshop
+ocp4_workload_aap_multiinstance_enable_hub: true
 ocp4_workload_aap_multiinstance_enable_lightspeed: false
 
 # ---------------------------------------------------------------
@@ -120,6 +121,10 @@ ocp4_workload_aap_multiinstance_eda_cluster_role: cluster-admin
 # Hub Settings
 # ---------------------------------------------------------------
 ocp4_workload_aap_multiinstance_hub_replicas: 1
+# Pod replica counts — must be 1 with ReadWriteOnce file storage (CNV default)
+ocp4_workload_aap_multiinstance_hub_content_replicas: 1
+ocp4_workload_aap_multiinstance_hub_worker_replicas: 1
+# Gunicorn worker processes inside each Hub pod (not pod replica count)
 ocp4_workload_aap_multiinstance_hub_content_workers: 2
 ocp4_workload_aap_multiinstance_hub_api_workers: 2
 ocp4_workload_aap_multiinstance_hub_file_storage_size: 100Gi

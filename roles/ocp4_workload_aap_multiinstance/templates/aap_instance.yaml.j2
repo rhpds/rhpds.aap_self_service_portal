@@ -76,11 +76,11 @@ spec:
     file_storage_storage_class: {{ aap_instance_hub_file_storage_class }}
 {% endif %}
 
-    # Worker and content replicas
+    # Worker and content pod replicas (separate from gunicorn worker counts)
     worker:
-      replicas: {{ aap_instance_hub_content_workers }}
+      replicas: {{ aap_instance_hub_worker_replicas }}
     content:
-      replicas: {{ aap_instance_hub_content_workers }}
+      replicas: {{ aap_instance_hub_content_replicas }}
 
     # Resource requirements
     resource_requirements: {{ aap_instance_hub_resource_requirements | to_json }}

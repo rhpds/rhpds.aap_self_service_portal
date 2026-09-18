@@ -55,6 +55,8 @@
     aap_instance_eda_service_account: "{{ ocp4_workload_aap_multiinstance_eda_service_account }}"
     aap_instance_eda_cluster_role: "{{ ocp4_workload_aap_multiinstance_eda_cluster_role }}"
     aap_instance_hub_replicas: "{{ ocp4_workload_aap_multiinstance_hub_replicas }}"
+    aap_instance_hub_content_replicas: "{{ ocp4_workload_aap_multiinstance_hub_content_replicas }}"
+    aap_instance_hub_worker_replicas: "{{ ocp4_workload_aap_multiinstance_hub_worker_replicas }}"
     aap_instance_hub_content_workers: "{{ ocp4_workload_aap_multiinstance_hub_content_workers }}"
     aap_instance_hub_api_workers: "{{ ocp4_workload_aap_multiinstance_hub_api_workers }}"
     aap_instance_hub_file_storage_size: "{{ ocp4_workload_aap_multiinstance_hub_file_storage_size }}"
