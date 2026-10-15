@@ -16,6 +16,9 @@ controller_verify_ssl: false
 aap_oauth_client_name: "Self Service"
 aap_organization: "Default"
 aap_ssl_verify: false
+
+# Org admin PAT (vaulted). Loaded into OpenShift secrets-scm and AAP credential below.
+portal_github_credential_name: "Portal GitHub Token"
 portal_github_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;gpte_vault_0
           63376265316238373337646431376233353734343633386564356161366136366339353031636339

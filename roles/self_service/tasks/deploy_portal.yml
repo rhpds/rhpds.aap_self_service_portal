@@ -16,6 +16,9 @@
 - name: Create OpenShift secrets
   include_tasks: oc_secrets.yml
 
+- name: Create Portal GitHub PAT credential in AAP
+  include_tasks: create_github_credential.yml
+
 - name: Build plugin registry
   include_tasks: plugins.yml
 
