@@ -20,10 +20,12 @@
   loop_control:
     label: "{{ item.name }}"
   register: _label_result
-  failed_when:
-    - _label_result is failed
-    - not aap_selfservice_custom_skip_existing
-    - "'already exists' not in (_label_result.msg | default(''))"
+  failed_when: >-
+    _label_result is failed
+    and not (
+      aap_selfservice_custom_skip_existing | bool
+      and ('already exists' in (_label_result.msg | default('')))
+    )
 
 - name: Display labels creation complete
   ansible.builtin.debug:

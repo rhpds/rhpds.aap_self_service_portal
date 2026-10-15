@@ -20,10 +20,12 @@
   loop_control:
     label: "{{ item.name }}"
   register: _inventory_result
-  failed_when:
-    - _inventory_result is failed
-    - not aap_selfservice_custom_skip_existing
-    - "'already exists' not in (_inventory_result.msg | default(''))"
+  failed_when: >-
+    _inventory_result is failed
+    and not (
+      aap_selfservice_custom_skip_existing | bool
+      and ('already exists' in (_inventory_result.msg | default('')))
+    )
 
 - name: Display inventories creation complete
   ansible.builtin.debug:

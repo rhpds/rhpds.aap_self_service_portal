@@ -17,8 +17,9 @@ aap_oauth_client_name: "Self Service"
 aap_organization: "Default"
 aap_ssl_verify: false
 
-# Org admin PAT (vaulted). Loaded into OpenShift secrets-scm and AAP credential below.
-portal_github_credential_name: "Portal GitHub Token"
+# Org admin PAT for secrets-scm (Backstage GitHub integration).
+# AAP credential "Portal GitHub Token" is created by aap_selfservice_custom.
+# Same vault blob as aap_selfservice_custom defaults (needed: roles load defaults separately).
 portal_github_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;gpte_vault_0
           63376265316238373337646431376233353734343633386564356161366136366339353031636339

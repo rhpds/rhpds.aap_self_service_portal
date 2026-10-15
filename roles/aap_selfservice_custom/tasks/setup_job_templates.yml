@@ -32,10 +32,12 @@
   loop_control:
     label: "{{ item.name }}"
   register: _job_template_result
-  failed_when:
-    - _job_template_result is failed
-    - not aap_selfservice_custom_skip_existing
-    - "'already exists' not in (_job_template_result.msg | default(''))"
+  failed_when: >-
+    _job_template_result is failed
+    and not (
+      aap_selfservice_custom_skip_existing | bool
+      and ('already exists' in (_job_template_result.msg | default('')))
+    )
 
 - name: Display job templates creation complete
   ansible.builtin.debug:

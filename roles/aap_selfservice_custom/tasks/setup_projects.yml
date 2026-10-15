@@ -26,10 +26,12 @@
   loop_control:
     label: "{{ item.name }}"
   register: _project_result
-  failed_when:
-    - _project_result is failed
-    - not aap_selfservice_custom_skip_existing
-    - "'already exists' not in (_project_result.msg | default(''))"
+  failed_when: >-
+    _project_result is failed
+    and not (
+      aap_selfservice_custom_skip_existing | bool
+      and ('already exists' in (_project_result.msg | default('')))
+    )
 
 - name: Display projects creation complete
   ansible.builtin.debug:
