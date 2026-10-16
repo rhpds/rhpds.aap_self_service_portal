@@ -571,9 +571,10 @@ aap_selfservice_custom_job_templates:
 # -------------------------------------------------------------------
 # Portal GitHub PAT (EE Builder / org automation)
 # -------------------------------------------------------------------
-# Vaulted org admin PAT. Also used by self_service oc_secrets → secrets-scm when set.
-# AAP credential is created in setup_credentials.yml.
+# Vaulted org admin PAT. Custom credential type injects portal_github_token for JTs.
+portal_github_credential_type_name: "Portal GitHub Token"
 portal_github_credential_name: "Portal GitHub Token"
+portal_github_org: AAP-Automation-Portal-Lab
 portal_github_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;gpte_vault_0
           63376265316238373337646431376233353734343633386564356161366136366339353031636339
