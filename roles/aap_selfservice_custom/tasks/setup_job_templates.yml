@@ -25,8 +25,7 @@
     survey_spec: "{{ item.survey_spec | default(omit) }}"
     state: present
     controller_host: "{{ aap_selfservice_custom_controller_url }}"
-    controller_username: "{{ aap_selfservice_custom_admin_username }}"
-    controller_password: "{{ aap_selfservice_custom_admin_password }}"
+    controller_oauthtoken: "{{ aap_selfservice_custom_oauthtoken }}"
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
   loop: "{{ aap_selfservice_custom_job_templates }}"
   loop_control:

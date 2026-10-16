@@ -38,6 +38,10 @@
   ansible.builtin.debug:
     msg: "AAP Gateway API is responding successfully"
 
+# Gateway OAuth token for ansible.controller (avoids "Failed to get token: 404" on AAP 2.7)
+- name: Create Gateway OAuth token for Controller modules
+  ansible.builtin.include_tasks: create_gateway_token.yml
+
 # -------------------------------------------------------------------
 # Create Demo Content in Order
 # -------------------------------------------------------------------

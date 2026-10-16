@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MIT-0
+---
+# Create a platform gateway OAuth token for ansible.controller modules.
+# Username/password auth in ansible.controller < 4.8 hits a token URL that
+# 404s on AAP 2.7 gateway ("Failed to get token: HTTP Error 404").
+# Passing controller_oauthtoken avoids that login flow.
+
+- name: Create AAP Gateway token for Controller CaC
+  ansible.builtin.uri:
+    url: "{{ aap_selfservice_custom_controller_url }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body:
+      description: "aap_selfservice_custom CaC token ({{ instance_label }})"
+      scope: write
+    status_code: [200, 201]
+  register: _aap_gateway_token_result
+  no_log: true
+
+- name: Set Controller OAuth token fact
+  ansible.builtin.set_fact:
+    aap_selfservice_custom_oauthtoken: "{{ _aap_gateway_token_result.json.token }}"
+  no_log: true
