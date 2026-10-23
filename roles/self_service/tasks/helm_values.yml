@@ -44,6 +44,28 @@
     name: "{{ helm_repo_name }}"
     repo_url: "{{ helm_repo_url }}"
 
+- name: Build Helm set_values for RHAAP portal
+  ansible.builtin.set_fact:
+    _portal_helm_set_values: >-
+      {{
+        [
+          {'value': 'redhat-developer-hub.global.clusterRouterBase=' ~ openshift_base_domain, 'value_type': 'string'},
+          {'value': 'redhat-developer-hub.upstream.backstage.image.tag=' ~ rhdh_image_tag, 'value_type': 'string'},
+          {'value': 'redhat-developer-hub.upstream.backstage.appConfig.auth.providers.rhaap.production.checkSSL=' ~ (aap_ssl_verify | string), 'value_type': 'string'},
+          {'value': 'redhat-developer-hub.upstream.backstage.appConfig.ansible.rhaap.checkSSL=' ~ (aap_ssl_verify | string), 'value_type': 'string'},
+        ]
+        + (
+          [
+            {
+              'value': 'redhat-developer-hub.upstream.backstage.appConfig.auth.providers.github.production.callbackUrl=' ~ portal_github_oauth_callback_url,
+              'value_type': 'string',
+            }
+          ]
+          if (portal_github_oauth_callback_url | default('') | trim | length) > 0
+          else []
+        )
+      }}
+
 - name: Install RHAAP chart from openshift repo
   kubernetes.core.helm:
     release_name: "{{ helm_release_name }}"
@@ -52,13 +74,5 @@
     release_namespace: "{{ openshift_namespace }}"
     values_files: "{{ helm_values }}"
     release_state: present
-    set_values:
-      - value: redhat-developer-hub.global.clusterRouterBase={{ openshift_base_domain }}
-        value_type: string
-      - value: redhat-developer-hub.upstream.backstage.image.tag={{ rhdh_image_tag }}
-        value_type: string
-      - value: redhat-developer-hub.upstream.backstage.appConfig.auth.providers.rhaap.production.checkSSL={{ aap_ssl_verify }}
-        value_type: string
-      - value: redhat-developer-hub.upstream.backstage.appConfig.ansible.rhaap.checkSSL={{ aap_ssl_verify }}
-        value_type: string
+    set_values: "{{ _portal_helm_set_values }}"
   tags: helm

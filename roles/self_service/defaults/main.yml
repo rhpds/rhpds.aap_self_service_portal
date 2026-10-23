@@ -17,6 +17,49 @@ aap_oauth_client_name: "Self Service"
 aap_organization: "Default"
 aap_ssl_verify: false
 
+# GitHub OAuth App for EE Builder student login (USER_OAUTH_TOKEN).
+# Create at https://github.com/settings/applications/new (or org Developer settings).
+# Pilot callback: https://<portal-host>/api/auth/github/handler/frame
+# Multi-instance: set OAuth App callback + this var to the proxy URL *including*
+# /api/auth/github/handler/frame (Backstage derives the nonce cookie Path from
+# callbackUrl pathname; a bare Function URL root yields Path=//github and breaks login).
+# -------------------------------------------------------------------
+# GitHub OAuth for the Self-Service Automation Portal
+# -------------------------------------------------------------------
+# @owner: Prakhar Srivastava <psrivast@redhat.com>
+# @purpose: GitHub OAuth client identifier for portal authentication
+# @impact: LOW - public application identifier; not sufficient for authentication
+# @expiration: UNKNOWN
+# @rotation: Rotate through the GitHub OAuth application settings
+# @source: atrotter@redhat.com; RHDPCD-2178
+# @exposure: Decrypted only during Ansible provisioning
+portal_github_oauth_client_id: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;gpte_vault_0
+          32623966393064633930373264336437613134663162633565376539653933326535396132376563
+          6534616365623463323266376236363162363338656564630a373532653936656261656361353338
+          33353334333338663938336366633234616135633939626531643964363433636266653136636532
+          3737616635656664360a333262316264343936613934613738336266366136623665386563643037
+          30643162386630306431333234386662383637333732353466366366633834316261
+
+# @owner: Prakhar Srivastava <psrivast@redhat.com>
+# @purpose: GitHub OAuth client secret for portal authentication
+# @impact: HIGH - leaked secret can compromise OAuth application authentication
+# @expiration: UNKNOWN
+# @rotation: Rotate through the GitHub OAuth application settings
+# @source: atrotter@redhat.com; RHDPCD-2178
+# @exposure: Decrypted only during Ansible provisioning
+portal_github_oauth_client_secret: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;gpte_vault_0
+          34313839316265623831366339346464356530336532343332306564343561616230356165383833
+          3737663633623666353135366632666137623235333432370a333330303237393030363030653635
+          36343234343764323264346336363865666266306632643736323763303432326465666530623132
+          3530366131323334320a653238333230376631653966313535656630383134353036653337363962
+          64663232653336643433616562363836363832626466633936316130313061363936393438636138
+          3266636430626339323662343130613334376663313837383338
+
+# Shared AWS Lambda Function URL (github-oauth-proxy/). Same for every lab instance.
+portal_github_oauth_callback_url: "https://jw7he3lj2lqqx475fvdepmhdm40yempp.lambda-url.us-east-1.on.aws/api/auth/github/handler/frame"
+
 # Org admin PAT for secrets-scm (Backstage GitHub integration).
 # AAP credential "Portal GitHub Token" is created by aap_selfservice_custom.
 # Same vault blob as aap_selfservice_custom defaults (needed: roles load defaults separately).
@@ -31,3 +74,37 @@ portal_github_token: !vault |
           39383365333136643538333265656532636437373838336231623139616130616231323164343865
           37393438666334346234363938343839613561313766643765363863343265376238353930346339
           6436
+
+# -------------------------------------------------------------------
+# console.redhat.com — Hub remotes (rh-certified / validated) token exchange
+# -------------------------------------------------------------------
+# Same gpte_vault_0 ciphertext as rhel_lightspeed_user / rhel_lightspeed_password
+# (vault encrypts the value, not the name). aap_selfservice_custom retrieves an
+# offline token at provision (SSO password grant, or vault portal_rh_hub_offline_token).
+# Do not put the password in the Hub remote Token field.
+# @owner: Anshul Behl <abehl@redhat.com> (source vault); portal rename for SSAP
+# @purpose: Red Hat account used to mint Automation Hub offline token for PAH remotes
+# @impact: HIGH - account can access console.redhat.com / Automation Hub
+# @source: Renamed from rhel_lightspeed_* vault blobs
+# @exposure: Decrypted only during Ansible provisioning
+portal_rh_console_username: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;gpte_vault_0
+          37303032353232346430353831366361613239343830346562656166313862306639343732393739
+          3162646639633461356266393364356237303863376663610a333866626431303632376135343430
+          62626666303337313263316364613265656162646135343934386630393563623730366564643231
+          6263383439616463610a623865613133353032353232323137316366636163613138383930346138
+          3666
+
+# @owner: Anshul Behl <abehl@redhat.com> (source vault); portal rename for SSAP
+# @purpose: Red Hat account password for Hub offline-token exchange
+# @impact: HIGH - with username, can obtain console.redhat.com offline tokens
+# @rotation: Update vault with new Red Hat account credentials
+# @source: Renamed from rhel_lightspeed_password vault blob
+# @exposure: Decrypted only during Ansible provisioning
+portal_rh_console_password: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;gpte_vault_0
+          39636436336138633234653632383864366166333863313063306133316232623031396237333238
+          6239653866343739323939346362646661323035613139610a383961306232656438656266346662
+          30613231323162613661626432626332353461663739336465343263333235316135366263333566
+          3062653230623364370a663031623165613531336133363861626437646335373937343432373633
+          3039

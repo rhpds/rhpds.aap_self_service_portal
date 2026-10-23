@@ -64,6 +64,10 @@ aap_selfservice_custom_inventories:
   - name: Network Inventory
     organization: Default
 
+  # Localhost for API-only JTs (GitHub join, etc.)
+  - name: Localhost Inventory
+    organization: Default
+
 # -------------------------------------------------------------------
 # Demo Credentials Configuration
 # -------------------------------------------------------------------
@@ -568,6 +572,39 @@ aap_selfservice_custom_job_templates:
     ask_credential_on_launch: true
     ask_variables_on_launch: true
 
+  # EE Builder — invite student GitHub user into lab team (push on EE repo only)
+  - name: GitHub/Join lab team
+    description: >-
+      Add your GitHub username to the lab team with write access on your
+      pre-created EE repo (PR + Actions dispatch). Accept the org invite email if prompted.
+    job_type: run
+    organization: Default
+    inventory: Localhost Inventory
+    project: SelfService Demo playbooks
+    playbook: join_github_org.yml
+    credentials:
+      - Portal GitHub Token
+    labels:
+      - custom
+    ask_inventory_on_launch: false
+    ask_credential_on_launch: false
+    survey_enabled: true
+    survey_spec:
+      name: ""
+      description: ""
+      spec:
+        - question_name: GitHub username
+          question_description: Your GitHub login (not email). You will get an org/team invite if not already a member.
+          required: true
+          type: text
+          variable: github_username
+          choices: ""
+          min: 1
+          max: 39
+          default: ""
+    # extra_vars set in setup_job_templates.yml per instance:
+    #   github_org, github_team=lab-{{ guid }}, github_repo={{ guid }}-{{ user }}-ee
+
 # -------------------------------------------------------------------
 # Portal GitHub PAT (EE Builder / org automation)
 # -------------------------------------------------------------------
@@ -586,6 +623,93 @@ portal_github_token: !vault |
           39383365333136643538333265656532636437373838336231623139616130616231323164343865
           37393438666334346234363938343839613561313766643765363863343265376238353930346339
           6436
+
+# -------------------------------------------------------------------
+# console.redhat.com — Hub remotes offline token
+# -------------------------------------------------------------------
+# Roles load defaults separately; same blobs as self_service/defaults.
+# Prefer vaulting portal_rh_hub_offline_token (from console Load Token).
+# Otherwise retrieve_rh_hub_offline_token.yml tries SSO password grant.
+portal_rh_sso_token_url: "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token"
+portal_rh_sso_client_id: cloud-services
+# Optional: paste offline token from console UI (skips password grant)
+portal_rh_hub_offline_token: ""
+portal_rh_console_username: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;gpte_vault_0
+          37303032353232346430353831366361613239343830346562656166313862306639343732393739
+          3162646639633461356266393364356237303863376663610a333866626431303632376135343430
+          62626666303337313263316364613265656162646135343934386630393563623730366564643231
+          6263383439616463610a623865613133353032353232323137316366636163613138383930346138
+          3666
+portal_rh_console_password: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;gpte_vault_0
+          39636436336138633234653632383864366166333863313063306133316232623031396237333238
+          6239653866343739323939346362646661323035613139610a383961306232656438656266346662
+          30613231323162613661626432626332353461663739336465343263333235316135366263333566
+          3062653230623364370a663031623165613531336133363861626437646335373937343432373633
+          3039
+
+# -------------------------------------------------------------------
+# Hub remotes (curated — avoid full catalog sync)
+# -------------------------------------------------------------------
+# configure_hub_remotes.yml PATCHes pulp remotes + kicks repository sync.
+aap_selfservice_custom_configure_hub_remotes: true
+# Seconds to poll each sync task (validated=all can run long; we still wait)
+aap_selfservice_custom_hub_sync_timeout: 1800
+aap_selfservice_custom_hub_sync_delay: 30
+
+portal_hub_rh_certified_collections:
+  - redhat.rhel_system_roles
+  - redhat.insights
+  - ansible.posix
+  - ansible.utils
+  - ansible.controller
+  - amazon.aws
+  - amazon.ai
+  - azure.azcollection
+  - google.cloud
+  - vmware.vmware_rest
+  - ansible.netcommon
+  - cisco.ios
+  - cisco.nxos
+  - cisco.aci
+  - cisco.iosxr
+  - arista.eos
+  - junipernetworks.junos
+  - f5networks.f5_modules
+  - ansible.windows
+  - microsoft.ad
+
+portal_hub_community_collections:
+  - community.general
+  - community.crypto
+  - community.postgresql
+  - community.mysql
+  - community.windows
+  - community.dns
+
+# Remote definitions consumed by configure_hub_remotes.yml
+portal_hub_remotes:
+  - name: rh-certified
+    url: "https://console.redhat.com/api/automation-hub/content/published/"
+    auth_url: "{{ portal_rh_sso_token_url }}"
+    use_token: true
+    # requirements built from portal_hub_rh_certified_collections
+    requirements_collections: "{{ portal_hub_rh_certified_collections }}"
+    wait_sync: true
+  - name: validated
+    url: "https://console.redhat.com/api/automation-hub/content/validated/"
+    auth_url: "{{ portal_rh_sso_token_url }}"
+    use_token: true
+    # empty = sync all validated content
+    requirements_collections: []
+    wait_sync: true
+  - name: community
+    url: "https://galaxy.ansible.com/api/"
+    auth_url: ""
+    use_token: false
+    requirements_collections: "{{ portal_hub_community_collections }}"
+    wait_sync: true
 
 # -------------------------------------------------------------------
 # Behavior Settings

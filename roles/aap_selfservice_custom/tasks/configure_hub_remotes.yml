@@ -1,0 +1,35 @@
+---
+# SPDX-License-Identifier: MIT-0
+# Configure PAH collection remotes (token + SSO + allow-lists) and sync repos.
+#
+# Expects per-instance:
+#   aap_selfservice_custom_controller_url
+#   aap_selfservice_custom_admin_username / _password
+# Shared fact from retrieve_rh_hub_offline_token.yml:
+#   portal_rh_hub_offline_token
+#
+# Uses Galaxy Pulp API on the platform gateway:
+#   GET/PATCH /api/galaxy/pulp/api/v3/remotes/ansible/collection/
+#   POST      /api/galaxy/pulp/api/v3/repositories/ansible/ansible/{pk}/sync/
+
+- name: Require Hub offline token for console.redhat.com remotes
+  ansible.builtin.assert:
+    that:
+      - portal_rh_hub_offline_token is defined
+      - (portal_rh_hub_offline_token | trim | length) > 0
+    fail_msg: >-
+      portal_rh_hub_offline_token is empty. Run retrieve_rh_hub_offline_token.yml
+      first, or vault an offline token from console.redhat.com.
+  when: portal_hub_remotes | selectattr('use_token') | list | length > 0
+  no_log: true
+
+- name: Set Hub API base URL
+  ansible.builtin.set_fact:
+    _hub_api_base: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy/pulp/api/v3"
+
+- name: Configure and sync each Hub remote
+  ansible.builtin.include_tasks: configure_hub_remote_one.yml
+  loop: "{{ portal_hub_remotes }}"
+  loop_control:
+    loop_var: hub_remote
+    label: "{{ hub_remote.name }}"

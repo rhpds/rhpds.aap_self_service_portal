@@ -27,6 +27,10 @@
   ansible.builtin.debug:
     msg: "Deployment mode: {{ 'Multi-user' if _aap_multi_user_mode else 'Single instance' }}"
 
+# Shared once for all instances — Hub remotes need the same console.redhat.com offline token
+- name: Retrieve console.redhat.com Hub offline token
+  ansible.builtin.include_tasks: retrieve_rh_hub_offline_token.yml
+
 # -------------------------------------------------------------------
 # Single Instance Mode
 # -------------------------------------------------------------------
@@ -55,6 +59,7 @@
         aap_selfservice_custom_admin_username: "{{ _aap_single_instance.admin_username }}"
         aap_selfservice_custom_admin_password: "{{ _aap_single_instance.admin_password }}"
         instance_label: "single instance"
+        instance_lab_user: "user1"
 
 # -------------------------------------------------------------------
 # Multi-User Mode
@@ -90,6 +95,7 @@
         aap_selfservice_custom_admin_username: "{{ _aap_common_admin_username }}"
         aap_selfservice_custom_admin_password: "{{ aap_instance.password }}"
         instance_label: "{{ aap_instance.user }}"
+        instance_lab_user: "{{ aap_instance.user }}"
       loop: "{{ _aap_instances }}"
       loop_control:
         loop_var: aap_instance

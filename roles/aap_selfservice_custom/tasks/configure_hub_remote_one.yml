@@ -1,0 +1,132 @@
+---
+# SPDX-License-Identifier: MIT-0
+# Configure a single Hub collection remote + optional sync.
+# Loop var: hub_remote (name, url, auth_url, use_token, requirements_collections, wait_sync)
+
+- name: "Look up collection remote {{ hub_remote.name }}"
+  ansible.builtin.uri:
+    url: "{{ _hub_api_base }}/remotes/ansible/collection/?name={{ hub_remote.name | urlencode }}"
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: 200
+  register: _hub_remote_list
+  no_log: true
+
+- name: "Fail when remote {{ hub_remote.name }} is missing"
+  ansible.builtin.assert:
+    that:
+      - (_hub_remote_list.json.results | default([]) | length) > 0
+    fail_msg: >-
+      Hub remote '{{ hub_remote.name }}' not found on
+      {{ aap_selfservice_custom_controller_url }}. Is Hub enabled?
+
+- name: Build requirements_file for {{ hub_remote.name }}
+  ansible.builtin.set_fact:
+    _hub_requirements_file: "{{ lookup('template', 'hub_requirements.yml.j2') if (hub_remote.requirements_collections | default([]) | length) > 0 else none }}"
+
+- name: "PATCH remote {{ hub_remote.name }}"
+  ansible.builtin.uri:
+    url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}{{ _hub_remote_list.json.results[0].pulp_href }}"
+    method: PATCH
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body: >-
+      {{
+        {
+          'url': hub_remote.url,
+          'tls_validation': true,
+          'requirements_file': _hub_requirements_file
+        }
+        | combine(
+            {'auth_url': hub_remote.auth_url, 'token': portal_rh_hub_offline_token}
+            if (hub_remote.use_token | default(false) | bool)
+            else {'auth_url': none, 'token': none}
+          )
+      }}
+    status_code: [200, 201, 202]
+  register: _hub_remote_patch
+  no_log: true
+
+- name: "Look up ansible repository {{ hub_remote.name }}"
+  ansible.builtin.uri:
+    url: "{{ _hub_api_base }}/repositories/ansible/ansible/?name={{ hub_remote.name | urlencode }}"
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: 200
+  register: _hub_repo_list
+  no_log: true
+
+- name: "Fail when repository {{ hub_remote.name }} is missing"
+  ansible.builtin.assert:
+    that:
+      - (_hub_repo_list.json.results | default([]) | length) > 0
+    fail_msg: "Hub repository '{{ hub_remote.name }}' not found."
+
+- name: "Start sync for repository {{ hub_remote.name }}"
+  ansible.builtin.uri:
+    url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}{{ _hub_repo_list.json.results[0].pulp_href }}sync/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body:
+      remote: "{{ _hub_remote_list.json.results[0].pulp_href }}"
+      mirror: true
+      optimize: true
+    status_code: [200, 201, 202]
+  register: _hub_sync_start
+  no_log: true
+
+- name: "Wait for {{ hub_remote.name }} sync task"
+  when: hub_remote.wait_sync | default(true) | bool
+  block:
+    - name: Resolve sync task href
+      ansible.builtin.set_fact:
+        _hub_sync_task_href: >-
+          {{
+            _hub_sync_start.json.task
+            | default(_hub_sync_start.json.tasks[0] | default(''))
+          }}
+
+    - name: "Poll sync task for {{ hub_remote.name }}"
+      ansible.builtin.uri:
+        url: >-
+          {{
+            _hub_sync_task_href
+            if (_hub_sync_task_href | regex_search('^https?://'))
+            else (
+              (aap_selfservice_custom_controller_url | regex_replace('/$', ''))
+              ~ _hub_sync_task_href
+            )
+          }}
+        method: GET
+        user: "{{ aap_selfservice_custom_admin_username }}"
+        password: "{{ aap_selfservice_custom_admin_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+        status_code: 200
+      register: _hub_sync_task
+      until: >-
+        (_hub_sync_task.json.state | default('')) in ['completed', 'failed', 'canceled']
+      retries: "{{ ((aap_selfservice_custom_hub_sync_timeout | int) / (aap_selfservice_custom_hub_sync_delay | int)) | int }}"
+      delay: "{{ aap_selfservice_custom_hub_sync_delay | int }}"
+      when: (_hub_sync_task_href | default('') | length) > 0
+      no_log: true
+
+    - name: "Report {{ hub_remote.name }} sync result"
+      ansible.builtin.debug:
+        msg: >-
+          Hub remote '{{ hub_remote.name }}' sync state=
+          {{ _hub_sync_task.json.state | default('unknown/timeout') }}
+          {{ '(check Remotes UI if not completed)' if (_hub_sync_task.json.state | default('')) != 'completed' else '' }}

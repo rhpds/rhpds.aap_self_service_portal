@@ -1,0 +1,21 @@
+---
+# SPDX-License-Identifier: MIT-0
+# Hosts required by demo inventories (e.g. Localhost Inventory for API-only JTs)
+
+- name: Add localhost to Localhost Inventory
+  ansible.controller.host:
+    name: localhost
+    inventory: Localhost Inventory
+    variables:
+      ansible_connection: local
+    state: present
+    controller_host: "{{ aap_selfservice_custom_controller_url }}"
+    controller_oauthtoken: "{{ aap_selfservice_custom_oauthtoken }}"
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+  register: _localhost_host_result
+  failed_when: >-
+    _localhost_host_result is failed
+    and not (
+      aap_selfservice_custom_skip_existing | bool
+      and ('already exists' in (_localhost_host_result.msg | default('')))
+    )

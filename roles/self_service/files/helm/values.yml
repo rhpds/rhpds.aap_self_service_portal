@@ -87,6 +87,11 @@ redhat-developer-hub:
           integrity: 'sha512-6oFAsgBclqDOFWrWZZV7XsYT5gwXZIPopQwmrUaPSWtvCeDhqAQ7r19FTw44ecT+GJt/I0YANVorf8ylGF0Amw=='
           package: 'http://plugin-registry:8080/ansible-backstage-plugin-auth-backend-module-rhaap-provider-dynamic-2.2.7.tgz'
           pluginConfig: {}
+        # Required for EE Builder "Log in with GitHub" (USER_OAUTH_TOKEN) — chart default we had dropped
+        - disabled: false
+          package: '{{- include "plugins.load.github-auth-provider" . }}'
+        - disabled: false
+          package: '{{- include "plugins.load.gitlab-auth-provider" . }}'
         - disabled: false
           package: >-
             ./dynamic-plugins/dist/backstage-plugin-scaffolder-backend-module-github-dynamic
@@ -122,6 +127,18 @@ redhat-developer-hub:
           environment: production
           omitIdentityTokenOwnershipClaim: true
           providers:
+            # Secondary auth for EE Builder scaffolder (USER_OAUTH_TOKEN) — not the sign-in page.
+            # Default scope is only read:user; repo+workflow needed to open PRs and
+            # dispatch ee-build.yml (GitHub returns 404 Not Found without them).
+            # Multi-instance: helm_values.yml sets callbackUrl from
+            # portal_github_oauth_callback_url (shared AWS proxy Function URL) when non-empty.
+            github:
+              production:
+                clientId: '${GITHUB_OAUTH_CLIENT_ID}'
+                clientSecret: '${GITHUB_OAUTH_CLIENT_SECRET}'
+                additionalScopes:
+                  - 'repo'
+                  - 'workflow'
             rhaap:
               production:
                 checkSSL: true
@@ -174,6 +191,34 @@ redhat-developer-hub:
                         minutes: 3
                       timeout:
                         seconds: 30
+                  # Sync collections from this instance's Private Automation Hub into portal Collections
+                  pahCollections:
+                    enabled: true
+                    repositories:
+                      - name: rh-certified
+                        schedule:
+                          frequency:
+                            minutes: 60
+                          timeout:
+                            minutes: 30
+                      - name: validated
+                        schedule:
+                          frequency:
+                            minutes: 60
+                          timeout:
+                            minutes: 30
+                      - name: community
+                        schedule:
+                          frequency:
+                            minutes: 60
+                          timeout:
+                            minutes: 30
+                      - name: published
+                        schedule:
+                          frequency:
+                            minutes: 60
+                          timeout:
+                            minutes: 30
                   ansibleGitContents:
                     enabled: true
                     schedule:
@@ -288,7 +333,9 @@ redhat-developer-hub:
                     priority: 10
                   importName: LogoutButton
                   mountPoint: global.header/profile
-        enableExperimentalRedirectFlow: true
+        # false = popup OAuth (required when portal is iframed in Showroom;
+        # GitHub sets X-Frame-Options: DENY so redirect-in-iframe fails)
+        enableExperimentalRedirectFlow: false
         integrations:
           github:
             - host: github.com
@@ -349,6 +396,30 @@ redhat-developer-hub:
             secretKeyRef:
               key: oauth-client-secret
               name: secrets-rhaap-portal
+        - name: GITHUB_OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: github-oauth-client-id
+              name: secrets-scm
+              optional: true
+        - name: GITHUB_OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: github-oauth-client-secret
+              name: secrets-scm
+              optional: true
+        - name: GITLAB_OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: gitlab-oauth-client-id
+              name: secrets-scm
+              optional: true
+        - name: GITLAB_OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: gitlab-oauth-client-secret
+              name: secrets-scm
+              optional: true
         - name: AAP_TOKEN
           valueFrom:
             secretKeyRef:
@@ -369,5 +440,5 @@ redhat-developer-hub:
       image:
         registry: registry.redhat.io
         repository: rhdh/rhdh-hub-rhel9
-        tag: 1.10
+        tag: "1.10"
     nameOverride: rhaap-portal

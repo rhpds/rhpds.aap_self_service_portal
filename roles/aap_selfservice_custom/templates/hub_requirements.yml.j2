@@ -1,0 +1,5 @@
+---
+collections:
+{% for collection in hub_remote.requirements_collections %}
+  - name: {{ collection }}
+{% endfor %}

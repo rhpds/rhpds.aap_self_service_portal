@@ -7,6 +7,15 @@
     msg: "Creating {{ aap_selfservice_custom_job_templates | length }} demo job templates..."
   when: aap_selfservice_custom_debug | bool
 
+# Resolve per-instance GitHub team/repo here so multi-user loops do not reuse a
+# defaults list templated for the first instance only.
+- name: Resolve GitHub/Join lab team extra_vars for this instance
+  ansible.builtin.set_fact:
+    _github_join_extra_vars:
+      github_org: "{{ portal_github_org }}"
+      github_team: "lab-{{ guid }}"
+      github_repo: "{{ guid }}-{{ instance_lab_user | default('user1') }}-ee"
+
 - name: Create AAP job templates
   ansible.controller.job_template:
     name: "{{ item.name }}"
@@ -23,6 +32,7 @@
     ask_variables_on_launch: "{{ item.ask_variables_on_launch | default(false) }}"
     survey_enabled: "{{ item.survey_enabled | default(false) }}"
     survey_spec: "{{ item.survey_spec | default(omit) }}"
+    extra_vars: "{{ _github_join_extra_vars if item.name == 'GitHub/Join lab team' else (item.extra_vars if item.extra_vars is defined else omit) }}"
     state: present
     controller_host: "{{ aap_selfservice_custom_controller_url }}"
     controller_oauthtoken: "{{ aap_selfservice_custom_oauthtoken }}"

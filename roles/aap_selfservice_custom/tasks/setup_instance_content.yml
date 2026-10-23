@@ -8,6 +8,11 @@
 #   aap_selfservice_custom_admin_username: Admin username
 #   aap_selfservice_custom_admin_password: Admin password
 #   instance_label: Human-readable label for logging
+#   instance_lab_user: lab user id (e.g. user1) for GitHub repo naming
+
+- name: Default instance_lab_user for GitHub JT extra_vars
+  ansible.builtin.set_fact:
+    instance_lab_user: "{{ instance_lab_user | default(instance_label | default('user1')) }}"
 
 - name: Display instance configuration start
   ansible.builtin.debug:
@@ -15,6 +20,7 @@
       - "Configuring AAP instance: {{ instance_label }}"
       - "Controller URL: {{ aap_selfservice_custom_controller_url }}"
       - "Admin Username: {{ aap_selfservice_custom_admin_username }}"
+      - "Lab user (GitHub repo prefix): {{ instance_lab_user }}"
 
 # -------------------------------------------------------------------
 # Validate AAP Connectivity
@@ -42,6 +48,11 @@
 - name: Create Gateway OAuth token for Controller modules
   ansible.builtin.include_tasks: create_gateway_token.yml
 
+# Hub remotes: token + SSO + curated allow-lists, then sync (needs Hub enabled)
+- name: Configure Hub remotes and sync collections
+  ansible.builtin.include_tasks: configure_hub_remotes.yml
+  when: aap_selfservice_custom_configure_hub_remotes | default(true) | bool
+
 # -------------------------------------------------------------------
 # Create Demo Content in Order
 # -------------------------------------------------------------------
@@ -52,6 +63,9 @@
 
 - name: Create demo inventories
   ansible.builtin.include_tasks: setup_inventories.yml
+
+- name: Create inventory hosts (localhost for API-only JTs)
+  ansible.builtin.include_tasks: setup_hosts.yml
 
 - name: Create demo credentials
   ansible.builtin.include_tasks: setup_credentials.yml
