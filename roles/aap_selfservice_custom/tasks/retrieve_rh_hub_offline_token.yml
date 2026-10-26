@@ -1,29 +1,23 @@
 ---
 # SPDX-License-Identifier: MIT-0
-# Obtain a console.redhat.com Automation Hub offline token for PAH remotes.
+# Ensure portal_hub_token is available for PAH remotes.
 #
 # Preference order:
-#   1) portal_rh_hub_offline_token already set (vaulted offline token)
+#   1) portal_hub_token already set (vaulted offline token from Load Token)
 #   2) SSO password grant using portal_rh_console_username / _password
-#      (client_id=cloud-services, scope includes offline_access)
+#      (usually fails — cloud-services is not password-grant enabled)
 #
-# Official RH docs only document minting the offline token via the console UI
-# ("Load Token"). Password grant may be disabled on SSO; if it fails, vault
-# portal_rh_hub_offline_token from https://console.redhat.com/ansible/automation-hub/token
-# while logged in as the lab console account.
-#
-# Sets fact: portal_rh_hub_offline_token (and _portal_rh_hub_token_source)
+# Vault from https://console.redhat.com/ansible/automation-hub/token
 
-- name: Use pre-vaulted Hub offline token when present
+- name: Mark vaulted portal_hub_token as ready
   ansible.builtin.set_fact:
-    portal_rh_hub_offline_token: "{{ portal_rh_hub_offline_token | trim }}"
-    _portal_rh_hub_token_source: vaulted
+    _portal_hub_token_source: vaulted
   when:
-    - portal_rh_hub_offline_token is defined
-    - (portal_rh_hub_offline_token | default('') | trim | length) > 0
+    - portal_hub_token is defined
+    - (portal_hub_token | default('') | trim | length) > 0
   no_log: true
 
-- name: Require console.redhat.com credentials when offline token is not vaulted
+- name: Require console.redhat.com credentials when portal_hub_token is empty
   ansible.builtin.assert:
     that:
       - portal_rh_console_username is defined
@@ -31,9 +25,9 @@
       - portal_rh_console_password is defined
       - (portal_rh_console_password | trim | length) > 0
     fail_msg: >-
-      Need portal_rh_hub_offline_token (preferred) or
+      Need portal_hub_token (preferred) or
       portal_rh_console_username + portal_rh_console_password to retrieve one.
-  when: _portal_rh_hub_token_source is not defined
+  when: _portal_hub_token_source is not defined
 
 - name: Request Hub offline token via Red Hat SSO password grant
   ansible.builtin.uri:
@@ -49,7 +43,7 @@
     status_code: [200, 400, 401]
     return_content: true
   register: _rh_sso_password_grant
-  when: _portal_rh_hub_token_source is not defined
+  when: _portal_hub_token_source is not defined
   no_log: true
   failed_when: false
 
@@ -63,28 +57,28 @@
       Password grant is often disabled for client_id={{ portal_rh_sso_client_id }}.
       Load a token once at
       https://console.redhat.com/ansible/automation-hub/token
-      (lab console account), then vault it as portal_rh_hub_offline_token.
+      (lab console account), then vault it as portal_hub_token.
   when:
-    - _portal_rh_hub_token_source is not defined
+    - _portal_hub_token_source is not defined
     - >-
       _rh_sso_password_grant.status | default(0) != 200
       or (_rh_sso_password_grant.json.refresh_token | default('') | length) == 0
 
-- name: Set Hub offline token from SSO password grant
+- name: Set portal_hub_token from SSO password grant
   ansible.builtin.set_fact:
-    portal_rh_hub_offline_token: "{{ _rh_sso_password_grant.json.refresh_token }}"
-    _portal_rh_hub_token_source: sso_password_grant
-  when: _portal_rh_hub_token_source is not defined
+    portal_hub_token: "{{ _rh_sso_password_grant.json.refresh_token }}"
+    _portal_hub_token_source: sso_password_grant
+  when: _portal_hub_token_source is not defined
   no_log: true
 
-- name: Confirm Hub offline token is available for remotes
+- name: Confirm portal_hub_token is available for remotes
   ansible.builtin.assert:
     that:
-      - portal_rh_hub_offline_token is defined
-      - (portal_rh_hub_offline_token | trim | length) > 0
-    fail_msg: portal_rh_hub_offline_token is empty after retrieval.
+      - portal_hub_token is defined
+      - (portal_hub_token | trim | length) > 0
+    fail_msg: portal_hub_token is empty after retrieval.
   no_log: true
 
 - name: Display Hub offline token source
   ansible.builtin.debug:
-    msg: "Hub offline token ready (source={{ _portal_rh_hub_token_source }})"
+    msg: "Hub offline token ready (source={{ _portal_hub_token_source }})"

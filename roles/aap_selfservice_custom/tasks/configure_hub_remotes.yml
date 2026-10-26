@@ -5,8 +5,8 @@
 # Expects per-instance:
 #   aap_selfservice_custom_controller_url
 #   aap_selfservice_custom_admin_username / _password
-# Shared fact from retrieve_rh_hub_offline_token.yml:
-#   portal_rh_hub_offline_token
+# Token from retrieve_rh_hub_offline_token.yml / vault:
+#   portal_hub_token
 #
 # Uses Galaxy Pulp API on the platform gateway:
 #   GET/PATCH /api/galaxy/pulp/api/v3/remotes/ansible/collection/
@@ -15,10 +15,10 @@
 - name: Require Hub offline token for console.redhat.com remotes
   ansible.builtin.assert:
     that:
-      - portal_rh_hub_offline_token is defined
-      - (portal_rh_hub_offline_token | trim | length) > 0
+      - portal_hub_token is defined
+      - (portal_hub_token | trim | length) > 0
     fail_msg: >-
-      portal_rh_hub_offline_token is empty. Run retrieve_rh_hub_offline_token.yml
+      portal_hub_token is empty. Run retrieve_rh_hub_offline_token.yml
       first, or vault an offline token from console.redhat.com.
   when: portal_hub_remotes | selectattr('use_token') | list | length > 0
   no_log: true

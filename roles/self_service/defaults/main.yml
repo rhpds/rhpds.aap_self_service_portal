@@ -79,9 +79,9 @@ portal_github_token: !vault |
 # console.redhat.com — Hub remotes (rh-certified / validated) token exchange
 # -------------------------------------------------------------------
 # Same gpte_vault_0 ciphertext as rhel_lightspeed_user / rhel_lightspeed_password
-# (vault encrypts the value, not the name). aap_selfservice_custom retrieves an
-# offline token at provision (SSO password grant, or vault portal_rh_hub_offline_token).
-# Do not put the password in the Hub remote Token field.
+# (vault encrypts the value, not the name). Hub remotes use vaulted portal_hub_token
+# (offline token from Load Token). Do not put the password in the Hub remote Token field.
+# @see aap_selfservice_custom defaults for portal_hub_token blob
 # @owner: Anshul Behl <abehl@redhat.com> (source vault); portal rename for SSAP
 # @purpose: Red Hat account used to mint Automation Hub offline token for PAH remotes
 # @impact: HIGH - account can access console.redhat.com / Automation Hub

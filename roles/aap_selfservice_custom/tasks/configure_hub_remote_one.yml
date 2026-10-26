@@ -44,7 +44,7 @@
           'requirements_file': _hub_requirements_file
         }
         | combine(
-            {'auth_url': hub_remote.auth_url, 'token': portal_rh_hub_offline_token}
+            {'auth_url': hub_remote.auth_url, 'token': portal_hub_token}
             if (hub_remote.use_token | default(false) | bool)
             else {'auth_url': none, 'token': none}
           )
