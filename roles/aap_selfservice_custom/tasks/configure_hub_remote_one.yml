@@ -2,6 +2,31 @@
 # SPDX-License-Identifier: MIT-0
 # Configure a single Hub collection remote + optional sync.
 # Loop var: hub_remote (name, url, auth_url, use_token, requirements_collections, wait_sync)
+#
+# AAP often ships rh-certified + community remotes only; validated may be a
+# repository with "no remote". Create the remote (and repo if needed) then sync.
+
+- name: Build requirements_file for {{ hub_remote.name }}
+  ansible.builtin.set_fact:
+    _hub_requirements_file: "{{ lookup('template', 'hub_requirements.yml.j2') if (hub_remote.requirements_collections | default([]) | length) > 0 else none }}"
+
+- name: Build remote body for {{ hub_remote.name }}
+  ansible.builtin.set_fact:
+    _hub_remote_body: >-
+      {{
+        {
+          'name': hub_remote.name,
+          'url': hub_remote.url,
+          'tls_validation': true,
+          'requirements_file': _hub_requirements_file
+        }
+        | combine(
+            {'auth_url': hub_remote.auth_url, 'token': portal_hub_token}
+            if (hub_remote.use_token | default(false) | bool)
+            else {'auth_url': none, 'token': none}
+          )
+      }}
+  no_log: true
 
 - name: "Look up collection remote {{ hub_remote.name }}"
   ansible.builtin.uri:
@@ -15,19 +40,22 @@
   register: _hub_remote_list
   no_log: true
 
-- name: "Fail when remote {{ hub_remote.name }} is missing"
-  ansible.builtin.assert:
-    that:
-      - (_hub_remote_list.json.results | default([]) | length) > 0
-    fail_msg: >-
-      Hub remote '{{ hub_remote.name }}' not found on
-      {{ aap_selfservice_custom_controller_url }}. Is Hub enabled?
+- name: "Create collection remote {{ hub_remote.name }} when missing"
+  ansible.builtin.uri:
+    url: "{{ _hub_api_base }}/remotes/ansible/collection/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body: "{{ _hub_remote_body }}"
+    status_code: [201, 202]
+  register: _hub_remote_create
+  when: (_hub_remote_list.json.results | default([]) | length) == 0
+  no_log: true
 
-- name: Build requirements_file for {{ hub_remote.name }}
-  ansible.builtin.set_fact:
-    _hub_requirements_file: "{{ lookup('template', 'hub_requirements.yml.j2') if (hub_remote.requirements_collections | default([]) | length) > 0 else none }}"
-
-- name: "PATCH remote {{ hub_remote.name }}"
+- name: "PATCH existing remote {{ hub_remote.name }}"
   ansible.builtin.uri:
     url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}{{ _hub_remote_list.json.results[0].pulp_href }}"
     method: PATCH
@@ -36,21 +64,20 @@
     force_basic_auth: true
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     body_format: json
-    body: >-
-      {{
-        {
-          'url': hub_remote.url,
-          'tls_validation': true,
-          'requirements_file': _hub_requirements_file
-        }
-        | combine(
-            {'auth_url': hub_remote.auth_url, 'token': portal_hub_token}
-            if (hub_remote.use_token | default(false) | bool)
-            else {'auth_url': none, 'token': none}
-          )
-      }}
+    body: "{{ _hub_remote_body | dict2items | rejectattr('key', 'equalto', 'name') | items2dict }}"
     status_code: [200, 201, 202]
   register: _hub_remote_patch
+  when: (_hub_remote_list.json.results | default([]) | length) > 0
+  no_log: true
+
+- name: Set remote pulp_href for {{ hub_remote.name }}
+  ansible.builtin.set_fact:
+    _hub_remote_href: >-
+      {{
+        _hub_remote_create.json.pulp_href
+        if (_hub_remote_create is defined and not (_hub_remote_create.skipped | default(false)))
+        else _hub_remote_list.json.results[0].pulp_href
+      }}
   no_log: true
 
 - name: "Look up ansible repository {{ hub_remote.name }}"
@@ -65,15 +92,9 @@
   register: _hub_repo_list
   no_log: true
 
-- name: "Fail when repository {{ hub_remote.name }} is missing"
-  ansible.builtin.assert:
-    that:
-      - (_hub_repo_list.json.results | default([]) | length) > 0
-    fail_msg: "Hub repository '{{ hub_remote.name }}' not found."
-
-- name: "Start sync for repository {{ hub_remote.name }}"
+- name: "Create ansible repository {{ hub_remote.name }} when missing"
   ansible.builtin.uri:
-    url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}{{ _hub_repo_list.json.results[0].pulp_href }}sync/"
+    url: "{{ _hub_api_base }}/repositories/ansible/ansible/"
     method: POST
     user: "{{ aap_selfservice_custom_admin_username }}"
     password: "{{ aap_selfservice_custom_admin_password }}"
@@ -81,7 +102,81 @@
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     body_format: json
     body:
-      remote: "{{ _hub_remote_list.json.results[0].pulp_href }}"
+      name: "{{ hub_remote.name }}"
+      remote: "{{ _hub_remote_href }}"
+      retain_repo_versions: 1
+    status_code: [201, 202]
+  register: _hub_repo_create
+  when: (_hub_repo_list.json.results | default([]) | length) == 0
+  no_log: true
+
+- name: "Attach remote to existing repository {{ hub_remote.name }}"
+  ansible.builtin.uri:
+    url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}{{ _hub_repo_list.json.results[0].pulp_href }}"
+    method: PATCH
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body:
+      remote: "{{ _hub_remote_href }}"
+    status_code: [200, 201, 202]
+  when:
+    - (_hub_repo_list.json.results | default([]) | length) > 0
+    - (_hub_repo_list.json.results[0].remote | default('') | string) != (_hub_remote_href | string)
+  no_log: true
+
+- name: Set repository pulp_href for {{ hub_remote.name }}
+  ansible.builtin.set_fact:
+    _hub_repo_href: >-
+      {{
+        _hub_repo_create.json.pulp_href
+        if (_hub_repo_create is defined and not (_hub_repo_create.skipped | default(false)))
+        else _hub_repo_list.json.results[0].pulp_href
+      }}
+  no_log: true
+
+- name: "Look up ansible distribution {{ hub_remote.name }}"
+  ansible.builtin.uri:
+    url: "{{ _hub_api_base }}/distributions/ansible/ansible/?name={{ hub_remote.name | urlencode }}"
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: 200
+  register: _hub_dist_list
+  no_log: true
+
+- name: "Create ansible distribution {{ hub_remote.name }} when missing"
+  ansible.builtin.uri:
+    url: "{{ _hub_api_base }}/distributions/ansible/ansible/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body:
+      name: "{{ hub_remote.name }}"
+      base_path: "{{ hub_remote.name }}"
+      repository: "{{ _hub_repo_href }}"
+    status_code: [201, 202]
+  when: (_hub_dist_list.json.results | default([]) | length) == 0
+  no_log: true
+
+- name: "Start sync for repository {{ hub_remote.name }}"
+  ansible.builtin.uri:
+    url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}{{ _hub_repo_href }}sync/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body:
+      remote: "{{ _hub_remote_href }}"
       mirror: true
       optimize: true
     status_code: [200, 201, 202]
