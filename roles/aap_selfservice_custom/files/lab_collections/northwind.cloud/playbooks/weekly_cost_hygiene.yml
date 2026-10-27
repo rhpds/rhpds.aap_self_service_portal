@@ -1,0 +1,7 @@
+---
+- name: Weekly Northwind cloud cost-hygiene scan
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - role: northwind.cloud.cost_hygiene

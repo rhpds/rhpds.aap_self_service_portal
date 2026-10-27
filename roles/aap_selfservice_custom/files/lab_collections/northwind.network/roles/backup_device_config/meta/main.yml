@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: backup_device_config
+  author: Northwind Network Engineering
+  description: Backup network device running configuration
+  license: MIT
+  min_ansible_version: "2.14"
+dependencies: []

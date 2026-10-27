@@ -1,0 +1,6 @@
+---
+- name: Northwind critical circuit health check
+  hosts: network
+  gather_facts: false
+  roles:
+    - role: northwind.network.circuit_health

@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: instance_tagging
+  author: Northwind Cloud Operations
+  description: Apply Northwind mandatory cloud resource tags
+  license: MIT
+  min_ansible_version: "2.14"
+dependencies: []

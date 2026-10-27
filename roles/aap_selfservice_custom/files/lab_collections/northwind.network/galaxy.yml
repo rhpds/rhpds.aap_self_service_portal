@@ -1,0 +1,16 @@
+namespace: northwind
+name: network
+version: 1.1.0
+readme: README.md
+authors:
+  - Northwind Network Engineering <neteng@northwind.example>
+description: >
+  Network engineering automation for Northwind — configuration backup,
+  circuit health checks, and playbooks backing the Network catalog in the
+  Self-Service Automation Portal.
+license_file: LICENSE
+tags: [northwind, network, backup, infrastructure]
+dependencies: {}
+repository: https://github.com/AAP-Automation-Portal-Lab/aap_lab.inventory
+documentation: https://github.com/AAP-Automation-Portal-Lab/aap_lab.inventory/blob/main/README.md
+homepage: https://northwind.example

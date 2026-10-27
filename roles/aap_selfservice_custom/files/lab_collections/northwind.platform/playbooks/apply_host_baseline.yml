@@ -1,0 +1,8 @@
+---
+# Northwind Platform — apply standard host baseline
+- name: Apply Northwind host baseline
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: northwind.platform.host_baseline

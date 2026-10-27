@@ -53,6 +53,11 @@
   ansible.builtin.include_tasks: configure_hub_remotes.yml
   when: aap_selfservice_custom_configure_hub_remotes | default(true) | bool
 
+# Northwind collections → this Hub `published` (portal Collections tab)
+- name: Publish lab collections to private Hub
+  ansible.builtin.include_tasks: publish_lab_collections.yml
+  when: aap_selfservice_custom_publish_lab_collections | default(true) | bool
+
 # EE Builder: pre-create org repo + Actions secrets for this instance Hub
 - name: Provision EE GitHub repo team secrets and variables
   ansible.builtin.include_tasks: provision_ee_github_repo.yml

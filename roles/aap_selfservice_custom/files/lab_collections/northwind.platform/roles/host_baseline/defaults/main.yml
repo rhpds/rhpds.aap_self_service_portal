@@ -1,0 +1,9 @@
+---
+northwind_motd_company: Northwind Corporation
+northwind_motd_environment: lab
+northwind_motd_contact: platform-automation@northwind.example
+northwind_timezone: UTC
+northwind_baseline_packages:
+  - chrony
+  - rsync
+  - vim-enhanced

@@ -1,0 +1,14 @@
+---
+# Wrapper used by Controller JTs that must respect CAB windows
+- name: Northwind change-window gated maintenance
+  hosts: all
+  become: true
+  gather_facts: false
+  roles:
+    - role: northwind.platform.change_window
+  tasks:
+    - name: Placeholder for patch / restart tasks
+      ansible.builtin.debug:
+        msg: >-
+          Inside approved window on {{ inventory_hostname }}.
+          Attach patch roles or workflow next steps here.

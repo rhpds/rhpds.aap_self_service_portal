@@ -1,0 +1,15 @@
+---
+- name: Query interface operational status
+  cisco.ios.ios_command:
+    commands: "show interfaces {{ item }} | include line protocol"
+  loop: "{{ northwind_network_critical_interfaces }}"
+  register: _nw_if
+  when: ansible_network_os is defined and ansible_network_os == 'cisco.ios.ios'
+
+- name: Summarize circuit health
+  ansible.builtin.debug:
+    msg: "{{ item.item }} => {{ item.stdout[0] | default('no data') }}"
+  loop: "{{ _nw_if.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('n/a') }}"
+  when: _nw_if is defined

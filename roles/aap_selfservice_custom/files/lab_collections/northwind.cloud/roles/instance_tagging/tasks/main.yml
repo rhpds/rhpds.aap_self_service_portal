@@ -1,0 +1,16 @@
+---
+- name: Require at least one instance id
+  ansible.builtin.assert:
+    that:
+      - northwind_cloud_instance_ids | length > 0
+    fail_msg: Set northwind_cloud_instance_ids to the EC2 instance id list to tag.
+
+- name: Apply Northwind mandatory tags to EC2 instances
+  amazon.aws.ec2_tag:
+    region: "{{ northwind_cloud_region }}"
+    resource: "{{ item }}"
+    state: present
+    tags: "{{ northwind_cloud_tags }}"
+  loop: "{{ northwind_cloud_instance_ids }}"
+  loop_control:
+    label: "{{ item }}"

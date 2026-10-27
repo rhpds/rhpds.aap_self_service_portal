@@ -1,0 +1,57 @@
+# Placeholder on the EE repo default branch so portal workflow_dispatch works.
+# GitHub only allows dispatching workflows that exist on the default branch.
+# The EE Builder PR replaces/extends this with the full creator-service workflow;
+# dispatch against the PR branch then runs that richer definition (same filename).
+name: Build Execution Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      ee_dir:
+        description: Path to the EE definition directory
+        required: false
+        default: "."
+      ee_file_name:
+        description: EE definition filename (e.g. execution-environment.yml)
+        required: false
+        default: "execution-environment.yml"
+      ee_registry:
+        description: Registry for the built image
+        required: false
+        default: ""
+      build_image_name:
+        description: Image name (namespace/name)
+        required: false
+        default: ""
+      build_image_tag:
+        description: Image tag
+        required: false
+        default: "latest"
+
+env:
+  EE_DIR: ${{ github.event.inputs.ee_dir || '.' }}
+
+jobs:
+  placeholder:
+    name: Waiting for EE Builder PR content
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Require real EE definition from scaffolder PR
+        run: |
+          set -euo pipefail
+          EE_DIR="${{ github.event.inputs.ee_dir || '.' }}"
+          EE_FILE="${{ github.event.inputs.ee_file_name || 'execution-environment.yml' }}"
+          TARGET="${EE_DIR%/}/${EE_FILE}"
+          echo "Looking for EE definition at: ${TARGET}"
+          if [ ! -f "${TARGET}" ]; then
+            echo "::error::No EE definition at ${TARGET}."
+            echo "Merge (or dispatch against) the EE Builder PR branch so scaffolded files exist on this ref."
+            echo "This default-branch workflow exists only so GitHub allows workflow_dispatch."
+            exit 1
+          fi
+          echo "EE definition present. If this is still the stub job, ensure dispatch ref is the PR branch with the full ee-build.yml."

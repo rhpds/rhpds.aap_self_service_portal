@@ -710,6 +710,19 @@ portal_rh_console_password: !vault |
 aap_selfservice_custom_provision_ee_github_repos: true
 
 # -------------------------------------------------------------------
+# Lab collections (Northwind) → each instance Hub `published`
+# -------------------------------------------------------------------
+# Bundled under files/lab_collections/. Built once per provision host,
+# uploaded to every AAP Hub (multi-instance safe — Hubs are independent).
+# Git repos tab uses the org GitHub repos (no provision publish needed).
+aap_selfservice_custom_publish_lab_collections: true
+portal_lab_collection_namespace: northwind
+portal_lab_collections:
+  - northwind.platform
+  - northwind.cloud
+  - northwind.network
+
+# -------------------------------------------------------------------
 # Hub remotes (curated — avoid full catalog sync)
 # -------------------------------------------------------------------
 # configure_hub_remotes.yml PATCHes pulp remotes + kicks repository sync.

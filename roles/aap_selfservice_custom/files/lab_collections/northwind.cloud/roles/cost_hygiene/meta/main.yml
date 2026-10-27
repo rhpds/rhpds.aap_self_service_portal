@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: cost_hygiene
+  author: Northwind Cloud Operations
+  description: Flag cloud resources missing Northwind FinOps tags
+  license: MIT
+  min_ansible_version: "2.14"
+dependencies: []

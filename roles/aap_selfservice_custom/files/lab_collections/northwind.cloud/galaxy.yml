@@ -1,0 +1,16 @@
+namespace: northwind
+name: cloud
+version: 1.1.0
+readme: README.md
+authors:
+  - Northwind Cloud Operations <cloud-ops@northwind.example>
+description: >
+  Cloud operations automation for Northwind — instance tagging standards,
+  idle-resource hygiene checks, and playbooks used by the Cloud self-service
+  catalog in Ansible Automation Platform.
+license_file: LICENSE
+tags: [northwind, cloud, aws, azure, tagging]
+dependencies: {}
+repository: https://github.com/AAP-Automation-Portal-Lab/aap_lab.observability
+documentation: https://github.com/AAP-Automation-Portal-Lab/aap_lab.observability/blob/main/README.md
+homepage: https://northwind.example

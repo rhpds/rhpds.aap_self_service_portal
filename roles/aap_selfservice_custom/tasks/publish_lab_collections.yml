@@ -1,0 +1,143 @@
+---
+# SPDX-License-Identifier: MIT-0
+# Publish bundled Northwind collections into this instance's Hub `published`
+# repo so the portal Collections tab can sync them.
+#
+# Safe for multi-instance: each Hub is independent; same tarballs are uploaded
+# per AAP. Tarballs are built once on the provision host and reused.
+#
+# Expects:
+#   aap_selfservice_custom_controller_url / _admin_username / _admin_password
+#   aap_selfservice_custom_oauthtoken (from create_gateway_token.yml)
+#   portal_lab_collections (list of dir names under files/lab_collections/)
+
+- name: Set lab collections workdir
+  ansible.builtin.set_fact:
+    _lab_collections_src: "{{ role_path }}/files/lab_collections"
+    _lab_collections_build: /tmp/portal-lab-collections-build-{{ guid | default('lab') }}
+
+- name: Ensure lab collections build directory
+  ansible.builtin.file:
+    path: "{{ _lab_collections_build }}"
+    state: directory
+    mode: "0755"
+
+- name: Build collection tarballs once per provision host
+  when: _lab_collection_tarballs is not defined
+  block:
+    - name: Build each Northwind collection
+      ansible.builtin.command:
+        argv:
+          - ansible-galaxy
+          - collection
+          - build
+          - "{{ _lab_collections_src }}/{{ item }}"
+          - --output-path
+          - "{{ _lab_collections_build }}"
+      loop: "{{ portal_lab_collections }}"
+      changed_when: true
+
+    - name: Find built collection tarballs
+      ansible.builtin.find:
+        paths: "{{ _lab_collections_build }}"
+        patterns: "*.tar.gz"
+      register: _lab_collection_find
+
+    - name: Record built tarball paths
+      ansible.builtin.set_fact:
+        _lab_collection_tarballs: "{{ _lab_collection_find.files | map(attribute='path') | list | sort }}"
+
+    - name: Require built tarballs
+      ansible.builtin.assert:
+        that:
+          - (_lab_collection_tarballs | length) == (portal_lab_collections | length)
+        fail_msg: >-
+          Expected {{ portal_lab_collections | length }} collection tarballs in
+          {{ _lab_collections_build }}, found {{ _lab_collection_tarballs | length }}.
+
+- name: Ensure Hub namespace for lab collections
+  ansible.builtin.uri:
+    url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy/v3/namespaces/"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    body_format: json
+    body:
+      name: "{{ portal_lab_collection_namespace }}"
+      groups: []
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: [201, 204, 400, 409]
+  register: _lab_ns_create
+  failed_when: false
+  no_log: true
+
+- name: Publish each lab collection tarball to Hub
+  ansible.builtin.command:
+    argv:
+      - ansible-galaxy
+      - collection
+      - publish
+      - "{{ item }}"
+      - --server
+      - "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy/"
+      - --token
+      - "{{ aap_selfservice_custom_oauthtoken }}"
+      - --ignore-certs
+      - --no-wait
+  loop: "{{ _lab_collection_tarballs }}"
+  register: _lab_collection_publish
+  changed_when: >-
+    'is already present' not in (_lab_collection_publish.stdout | default(''))
+    and 'is already present' not in (_lab_collection_publish.stderr | default(''))
+  failed_when: >-
+    (_lab_collection_publish.rc | default(1)) != 0
+    and ('already' not in (_lab_collection_publish.stdout | default('') ~ _lab_collection_publish.stderr | default('')) | lower)
+  no_log: true
+  loop_control:
+    label: "{{ item | basename }}"
+
+# Uploads land in staging when approval is required; move into published.
+# Tarball name: <namespace>-<name>-<version>.tar.gz
+- name: Resolve collection namespace/name/version from each tarball name
+  ansible.builtin.set_fact:
+    _lab_collection_coords: "{{ _lab_collection_coords | default([]) + [_coord] }}"
+  vars:
+    _base: "{{ item | basename }}"
+    _coord:
+      namespace: "{{ _base | regex_replace('^([^-]+)-.*$', '\\1') }}"
+      name: "{{ _base | regex_replace('^[^-]+-([^-]+)-.*$', '\\1') }}"
+      version: "{{ _base | regex_replace('^[^-]+-[^-]+-(.*)\\.tar\\.gz$', '\\1') }}"
+  loop: "{{ _lab_collection_tarballs }}"
+  when: _lab_collection_coords is not defined or (_lab_collection_coords | length) < (_lab_collection_tarballs | length)
+  loop_control:
+    label: "{{ item | basename }}"
+
+- name: Move lab collections from staging to published
+  ansible.builtin.uri:
+    url: >-
+      {{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}
+      /api/galaxy/v3/collections/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/move/staging/published/
+    method: POST
+    headers:
+      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: [200, 201, 202, 204, 400, 404]
+    return_content: true
+  loop: "{{ _lab_collection_coords }}"
+  register: _lab_collection_move
+  failed_when: false
+  no_log: true
+  loop_control:
+    label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
+
+- name: Wait briefly for Hub import/move tasks
+  ansible.builtin.pause:
+    seconds: 15
+    prompt: "Waiting for Hub to finish importing Northwind collections..."
+
+- name: Report lab collections publish status
+  ansible.builtin.debug:
+    msg: >-
+      Published {{ portal_lab_collections | length }} Northwind collection(s)
+      to {{ aap_selfservice_custom_controller_url }} Hub (namespace={{ portal_lab_collection_namespace }}).
+      Portal Collections tab should show them under `published` after Sync Now.

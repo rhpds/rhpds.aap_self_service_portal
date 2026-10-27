@@ -1,0 +1,23 @@
+---
+- name: Ensure backup directory exists on the control node
+  ansible.builtin.file:
+    path: "{{ northwind_network_backup_root }}/{{ inventory_hostname }}"
+    state: directory
+    mode: "0750"
+  delegate_to: localhost
+
+- name: Collect running configuration
+  cisco.ios.ios_command:
+    commands: show running-config
+  register: _nw_running
+  when: ansible_network_os is defined and ansible_network_os == 'cisco.ios.ios'
+
+- name: Write configuration backup
+  ansible.builtin.copy:
+    dest: >-
+      {{ northwind_network_backup_root }}/{{ inventory_hostname }}/{{
+        now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}-running-config.txt
+    mode: "0640"
+    content: "{{ _nw_running.stdout[0] | default('# no config collected') }}\n"
+  delegate_to: localhost
+  when: _nw_running is defined

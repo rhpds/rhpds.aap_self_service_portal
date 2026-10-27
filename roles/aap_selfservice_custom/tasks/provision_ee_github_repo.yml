@@ -119,6 +119,40 @@
   register: _ee_repo_get
   no_log: true
 
+# GitHub only allows workflow_dispatch if ee-build.yml exists on the default
+# branch. EE Builder publishes a PR first; without this stub, dispatch 404s.
+- name: Look up existing ee-build.yml on default branch
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}/contents/.github/workflows/ee-build.yml"
+    method: GET
+    headers: "{{ _ee_gh_headers }}"
+    status_code: [200, 404]
+  register: _ee_workflow_get
+  no_log: true
+
+- name: Seed ee-build.yml on default branch for workflow_dispatch
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}/contents/.github/workflows/ee-build.yml"
+    method: PUT
+    headers: "{{ _ee_gh_headers }}"
+    body_format: json
+    body: >-
+      {{
+        {
+          'message': 'Seed ee-build.yml so portal can workflow_dispatch',
+          'content': lookup('ansible.builtin.file', 'ee_github/ee-build.yml') | b64encode,
+          'branch': (_ee_repo_get.json.default_branch | default('main'))
+        }
+        | combine(
+            {'sha': _ee_workflow_get.json.sha}
+            if (_ee_workflow_get.status | default(0)) == 200
+            else {}
+          )
+      }}
+    status_code: [200, 201]
+  when: (_ee_workflow_get.status | default(0)) == 404
+  no_log: true
+
 - name: Grant lab team push on EE repository
   ansible.builtin.uri:
     url: "https://api.github.com/orgs/{{ _ee_gh_org }}/teams/{{ _ee_team_slug }}/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}"

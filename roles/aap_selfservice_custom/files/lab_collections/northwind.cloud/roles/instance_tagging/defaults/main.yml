@@ -1,0 +1,8 @@
+---
+northwind_cloud_tags:
+  nw:owner: platform-automation@northwind.example
+  nw:cost-center: CC-1200
+  nw:environment: lab
+  nw:application: self-service-portal
+northwind_cloud_region: us-east-1
+northwind_cloud_instance_ids: []

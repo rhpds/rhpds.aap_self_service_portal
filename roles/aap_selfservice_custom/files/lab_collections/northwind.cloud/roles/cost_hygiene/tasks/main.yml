@@ -1,0 +1,28 @@
+---
+- name: Discover EC2 instances in the region
+  amazon.aws.ec2_instance_info:
+    region: "{{ northwind_cloud_region }}"
+  register: _nw_ec2
+
+- name: Reset findings list
+  ansible.builtin.set_fact:
+    northwind_untagged_instances: []
+
+- name: Identify instances missing required tags
+  ansible.builtin.set_fact:
+    northwind_untagged_instances: "{{ northwind_untagged_instances + [inst.instance_id] }}"
+  loop: "{{ _nw_ec2.instances }}"
+  loop_control:
+    loop_var: inst
+    label: "{{ inst.instance_id }}"
+  when: >
+    northwind_required_tag_keys
+    | difference((inst.tags | default({})).keys() | list)
+    | length > 0
+
+- name: Report FinOps hygiene findings
+  ansible.builtin.debug:
+    msg: >-
+      {{ northwind_untagged_instances | length }} instance(s) missing
+      required Northwind tags {{ northwind_required_tag_keys }}:
+      {{ northwind_untagged_instances }}

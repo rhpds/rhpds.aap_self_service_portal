@@ -1,0 +1,7 @@
+---
+- name: Tag instances provisioned from the Northwind portal
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - role: northwind.cloud.instance_tagging

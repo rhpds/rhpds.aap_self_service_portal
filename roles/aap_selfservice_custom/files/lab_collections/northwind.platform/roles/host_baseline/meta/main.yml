@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: host_baseline
+  author: Northwind Platform Engineering
+  description: Standard Linux host baseline for Northwind managed nodes
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: EL
+      versions: ['8', '9']
+  galaxy_tags: [northwind, baseline, linux]
+dependencies: []

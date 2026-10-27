@@ -1,0 +1,6 @@
+---
+- name: Nightly Northwind network configuration backup
+  hosts: network
+  gather_facts: false
+  roles:
+    - role: northwind.network.backup_device_config

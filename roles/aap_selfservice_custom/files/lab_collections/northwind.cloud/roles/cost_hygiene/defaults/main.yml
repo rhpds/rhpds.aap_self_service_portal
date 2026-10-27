@@ -1,0 +1,6 @@
+---
+northwind_required_tag_keys:
+  - nw:owner
+  - nw:cost-center
+  - nw:environment
+northwind_cloud_region: us-east-1

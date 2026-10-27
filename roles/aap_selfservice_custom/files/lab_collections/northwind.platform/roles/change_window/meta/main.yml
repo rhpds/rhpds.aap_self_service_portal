@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: change_window
+  author: Northwind Platform Engineering
+  description: Guard plays so they only run inside Northwind maintenance windows
+  license: MIT
+  min_ansible_version: "2.14"
+  galaxy_tags: [northwind, change, governance]
+dependencies: []
