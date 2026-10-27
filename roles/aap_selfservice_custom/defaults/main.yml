@@ -609,6 +609,10 @@ aap_selfservice_custom_job_templates:
 # Portal GitHub PAT (EE Builder / org automation)
 # -------------------------------------------------------------------
 # Vaulted org admin PAT. Custom credential type injects portal_github_token for JTs.
+# Fine-grained: Contents + Workflows + Secrets + Administration (or equiv) on the lab org.
+# Workflows: Read and write is required to seed .github/workflows/ee-build.yml; without it
+# Contents writes succeed but workflow paths return 403 and EE Builder dispatch 404s.
+# Classic PAT: repo + workflow + admin:org (as needed for teams).
 portal_github_credential_type_name: "Portal GitHub Token"
 portal_github_credential_name: "Portal GitHub Token"
 portal_github_org: AAP-Automation-Portal-Lab

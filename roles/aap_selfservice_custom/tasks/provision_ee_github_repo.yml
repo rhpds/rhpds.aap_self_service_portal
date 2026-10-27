@@ -130,6 +130,11 @@
   register: _ee_workflow_get
   no_log: true
 
+# Fine-grained PATs need Repository permissions → Workflows: Read and write
+# (Contents alone is not enough for paths under .github/workflows/).
+# Classic PATs need the workflow scope. Without it GitHub returns 403
+# "Resource not accessible by personal access token" and EE Builder later
+# fails workflow_dispatch with 404 Not Found.
 - name: Seed ee-build.yml on default branch for workflow_dispatch
   ansible.builtin.uri:
     url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}/contents/.github/workflows/ee-build.yml"
@@ -149,9 +154,32 @@
             else {}
           )
       }}
-    status_code: [200, 201]
+    status_code: [200, 201, 403]
+  register: _ee_workflow_seed
   when: (_ee_workflow_get.status | default(0)) == 404
   no_log: true
+
+- name: Fail clearly when PAT cannot write workflow files
+  ansible.builtin.fail:
+    msg: >-
+      {{
+        (
+          'Could not write .github/workflows/ee-build.yml (HTTP 403). '
+          ~ 'portal_github_token can create the repo and set secrets, but '
+          ~ 'writing workflow files requires fine-grained PAT permission '
+          ~ 'Workflows: Read and write (or classic PAT scope workflow). '
+          ~ 'Add that permission, then re-run EE repo provision.'
+        )
+        if (_ee_workflow_seed.status | default(0)) == 403
+        else (
+          'Could not seed ee-build.yml (HTTP '
+          ~ (_ee_workflow_seed.status | default('?') | string)
+          ~ ').'
+        )
+      }}
+  when:
+    - _ee_workflow_seed is not skipped
+    - (_ee_workflow_seed.status | default(0)) not in [200, 201]
 
 - name: Grant lab team push on EE repository
   ansible.builtin.uri:
