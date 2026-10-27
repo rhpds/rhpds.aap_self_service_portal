@@ -703,6 +703,13 @@ portal_rh_console_password: !vault |
           3039
 
 # -------------------------------------------------------------------
+# EE Builder — pre-create GitHub repo per AAP instance
+# -------------------------------------------------------------------
+# Creates lab-{{ guid }} team, {{ guid }}-{{ user }}-ee repo, Actions
+# Galaxy + REGISTRY secrets/vars, team push. Requires portal_github_token.
+aap_selfservice_custom_provision_ee_github_repos: true
+
+# -------------------------------------------------------------------
 # Hub remotes (curated — avoid full catalog sync)
 # -------------------------------------------------------------------
 # configure_hub_remotes.yml PATCHes pulp remotes + kicks repository sync.

@@ -1,0 +1,263 @@
+---
+# SPDX-License-Identifier: MIT-0
+# Pre-create EE Builder GitHub repo for this AAP instance:
+#   team lab-{{ guid }}, repo {{ guid }}-{{ instance_lab_user }}-ee,
+#   Galaxy Actions secrets (gateway token), REGISTRY_* (admin password / username),
+#   team push on the repo.
+#
+# Expects:
+#   portal_github_token, portal_github_org, guid, instance_lab_user
+#   aap_selfservice_custom_controller_url / _admin_username / _admin_password
+
+- name: Require GitHub PAT and guid for EE repo provision
+  ansible.builtin.assert:
+    that:
+      - portal_github_token is defined
+      - (portal_github_token | trim | length) > 0
+      - guid is defined
+      - (guid | string | trim | length) > 0
+    fail_msg: >-
+      Need vaulted portal_github_token and guid to pre-create
+      {{ portal_github_org | default('AAP-Automation-Portal-Lab') }}/{{ guid }}-*-ee.
+  no_log: true
+
+- name: Set EE GitHub naming for this instance
+  ansible.builtin.set_fact:
+    _ee_gh_org: "{{ portal_github_org | default('AAP-Automation-Portal-Lab') | trim }}"
+    _ee_gh_team: "lab-{{ guid }}"
+    _ee_gh_team_slug: "{{ ('lab-' ~ guid) | lower | regex_replace('[^a-z0-9]+', '-') | regex_replace('^-|-$', '') }}"
+    _ee_gh_repo: "{{ guid }}-{{ instance_lab_user | default('user1') }}-ee"
+    _ee_gh_headers:
+      Authorization: "Bearer {{ portal_github_token | trim }}"
+      Accept: application/vnd.github+json
+      X-GitHub-Api-Version: "2022-11-28"
+    _ee_galaxy_secret_names:
+      - ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_COMMUNITY_TOKEN
+      - ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_PUBLISHED_TOKEN
+      - ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_RH_CERTIFIED_TOKEN
+      - ANSIBLE_GALAXY_SERVER_PRIVATE_HUB_VALIDATED_TOKEN
+  no_log: true
+
+- name: Look up lab team {{ _ee_gh_team_slug }}
+  ansible.builtin.uri:
+    url: "https://api.github.com/orgs/{{ _ee_gh_org }}/teams/{{ _ee_gh_team_slug }}"
+    method: GET
+    headers: "{{ _ee_gh_headers }}"
+    status_code: [200, 404]
+  register: _ee_team_get
+  no_log: true
+
+- name: Create lab team when missing
+  ansible.builtin.uri:
+    url: "https://api.github.com/orgs/{{ _ee_gh_org }}/teams"
+    method: POST
+    headers: "{{ _ee_gh_headers }}"
+    body_format: json
+    body:
+      name: "{{ _ee_gh_team }}"
+      description: "EE Builder lab team (push on assigned EE repos only)"
+      privacy: closed
+    status_code: [201, 422]
+  register: _ee_team_create
+  when: _ee_team_get.status == 404
+  no_log: true
+
+- name: Resolve lab team slug
+  ansible.builtin.set_fact:
+    _ee_team_slug: >-
+      {{
+        _ee_team_get.json.slug
+        if _ee_team_get.status == 200
+        else (
+          _ee_team_create.json.slug
+          if (_ee_team_create is not skipped and (_ee_team_create.status | default(0)) == 201)
+          else _ee_gh_team_slug
+        )
+      }}
+
+- name: Re-fetch lab team after create conflict
+  ansible.builtin.uri:
+    url: "https://api.github.com/orgs/{{ _ee_gh_org }}/teams/{{ _ee_gh_team_slug }}"
+    method: GET
+    headers: "{{ _ee_gh_headers }}"
+    status_code: 200
+  register: _ee_team_refetch
+  when:
+    - _ee_team_get.status == 404
+    - _ee_team_create is not skipped
+    - (_ee_team_create.status | default(0)) == 422
+  no_log: true
+
+- name: Use refetched team slug after 422
+  ansible.builtin.set_fact:
+    _ee_team_slug: "{{ _ee_team_refetch.json.slug }}"
+  when:
+    - _ee_team_refetch is not skipped
+    - _ee_team_refetch is succeeded
+
+- name: Create EE repository {{ _ee_gh_repo }}
+  ansible.builtin.uri:
+    url: "https://api.github.com/orgs/{{ _ee_gh_org }}/repos"
+    method: POST
+    headers: "{{ _ee_gh_headers }}"
+    body_format: json
+    body:
+      name: "{{ _ee_gh_repo }}"
+      private: false
+      auto_init: true
+      description: "EE Builder lab repo for {{ instance_lab_user }} ({{ guid }})"
+    status_code: [201, 422]
+  register: _ee_repo_create
+  no_log: true
+
+- name: Verify EE repository exists
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}"
+    method: GET
+    headers: "{{ _ee_gh_headers }}"
+    status_code: 200
+  register: _ee_repo_get
+  no_log: true
+
+- name: Grant lab team push on EE repository
+  ansible.builtin.uri:
+    url: "https://api.github.com/orgs/{{ _ee_gh_org }}/teams/{{ _ee_team_slug }}/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}"
+    method: PUT
+    headers: "{{ _ee_gh_headers }}"
+    body_format: json
+    body:
+      permission: push
+    status_code: [200, 204]
+  no_log: true
+
+- name: Mint gateway API token for Galaxy Actions secrets
+  ansible.builtin.uri:
+    url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/gateway/v1/tokens/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    headers:
+      Content-Type: application/json
+    body_format: json
+    body:
+      description: "ee-builder-actions-{{ _ee_gh_repo }}"
+      scope: write
+    status_code: [200, 201]
+  register: _ee_gateway_token
+  no_log: true
+
+- name: Set hub_galaxy_token for Actions secrets
+  ansible.builtin.set_fact:
+    _ee_hub_galaxy_token: "{{ _ee_gateway_token.json.token }}"
+  no_log: true
+
+- name: Get Actions secrets public key
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}/actions/secrets/public-key"
+    method: GET
+    headers: "{{ _ee_gh_headers }}"
+    status_code: 200
+  register: _ee_secrets_pubkey
+  no_log: true
+
+- name: Ensure PyNaCl for GitHub secret encryption
+  ansible.builtin.pip:
+    name: pynacl
+    state: present
+    extra_args: --user
+
+- name: Encrypt Galaxy and registry secret values
+  ansible.builtin.command:
+    cmd: python3 -
+    stdin: |
+      from base64 import b64encode
+      from nacl import encoding, public
+      import os
+      public_key = public.PublicKey(
+          os.environ["GITHUB_KEY"].encode("utf-8"),
+          encoding.Base64Encoder(),
+      )
+      sealed_box = public.SealedBox(public_key)
+      encrypted = sealed_box.encrypt(os.environ["SECRET_VALUE"].encode("utf-8"))
+      print(b64encode(encrypted).decode("utf-8"))
+  environment:
+    GITHUB_KEY: "{{ _ee_secrets_pubkey.json.key }}"
+    SECRET_VALUE: "{{ item.value }}"
+  register: _ee_encrypted_secrets
+  changed_when: false
+  no_log: true
+  loop:
+    - name: galaxy
+      value: "{{ _ee_hub_galaxy_token }}"
+    - name: registry
+      value: "{{ aap_selfservice_custom_admin_password }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Map encrypted Actions payloads
+  ansible.builtin.set_fact:
+    _ee_enc_galaxy: "{{ _ee_encrypted_secrets.results[0].stdout }}"
+    _ee_enc_registry: "{{ _ee_encrypted_secrets.results[1].stdout }}"
+  no_log: true
+
+- name: Set Galaxy Actions secrets (gateway token)
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}/actions/secrets/{{ item }}"
+    method: PUT
+    headers: "{{ _ee_gh_headers }}"
+    body_format: json
+    body:
+      encrypted_value: "{{ _ee_enc_galaxy }}"
+      key_id: "{{ _ee_secrets_pubkey.json.key_id }}"
+    status_code: [201, 204]
+  loop: "{{ _ee_galaxy_secret_names }}"
+  no_log: true
+
+- name: Set REGISTRY_PASSWORD Actions secret (admin password)
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}/actions/secrets/REGISTRY_PASSWORD"
+    method: PUT
+    headers: "{{ _ee_gh_headers }}"
+    body_format: json
+    body:
+      encrypted_value: "{{ _ee_enc_registry }}"
+      key_id: "{{ _ee_secrets_pubkey.json.key_id }}"
+    status_code: [201, 204]
+  no_log: true
+
+- name: Create REGISTRY_USERNAME Actions variable
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}/actions/variables/REGISTRY_USERNAME"
+    method: POST
+    headers: "{{ _ee_gh_headers }}"
+    body_format: json
+    body:
+      name: REGISTRY_USERNAME
+      value: "{{ aap_selfservice_custom_admin_username }}"
+    status_code: [201, 409]
+  register: _ee_reg_user_var
+  failed_when: false
+  no_log: true
+
+- name: Update REGISTRY_USERNAME if it already exists
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}/actions/variables/REGISTRY_USERNAME"
+    method: PATCH
+    headers: "{{ _ee_gh_headers }}"
+    body_format: json
+    body:
+      name: REGISTRY_USERNAME
+      value: "{{ aap_selfservice_custom_admin_username }}"
+    status_code: [204]
+  when: (_ee_reg_user_var.status | default(0)) == 409
+  no_log: true
+
+- name: Report EE GitHub repo ready
+  ansible.builtin.debug:
+    msg: >-
+      EE repo ready: https://github.com/{{ _ee_gh_org }}/{{ _ee_gh_repo }}
+      (team={{ _ee_team_slug }} push; Galaxy=gateway token;
+      REGISTRY_PASSWORD=admin password;
+      REGISTRY_USERNAME={{ aap_selfservice_custom_admin_username }})
