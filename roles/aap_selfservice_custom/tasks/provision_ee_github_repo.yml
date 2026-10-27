@@ -162,29 +162,65 @@
   register: _ee_secrets_pubkey
   no_log: true
 
+# AgnosticD runners often have several Pythons and may set PYTHONNOUSERSITE.
+# Install PyNaCl into a private target dir and put it on PYTHONPATH.
+- name: Resolve Python interpreter for GitHub secret encryption
+  ansible.builtin.set_fact:
+    _ee_python: "{{ ansible_playbook_python | default('/usr/bin/python3') }}"
+    _ee_nacl_target: /tmp/ee-github-nacl-{{ guid | default('lab') }}
+
+- name: Create PyNaCl install target directory
+  ansible.builtin.file:
+    path: "{{ _ee_nacl_target }}"
+    state: directory
+    mode: "0700"
+
 - name: Ensure PyNaCl for GitHub secret encryption
-  ansible.builtin.pip:
-    name: pynacl
-    state: present
-    extra_args: --user
+  ansible.builtin.command:
+    argv:
+      - "{{ _ee_python }}"
+      - -m
+      - pip
+      - install
+      - --upgrade
+      - --target
+      - "{{ _ee_nacl_target }}"
+      - pynacl
+  register: _ee_pip_nacl
+  changed_when: >-
+    'Successfully installed' in (_ee_pip_nacl.stdout | default(''))
+    or 'Successfully installed' in (_ee_pip_nacl.stderr | default(''))
+
+- name: Verify PyNaCl import on encrypt interpreter
+  ansible.builtin.command:
+    argv:
+      - "{{ _ee_python }}"
+      - -c
+      - import nacl; from nacl import encoding, public
+  environment:
+    PYTHONPATH: "{{ _ee_nacl_target }}{{ ansible_env.PYTHONPATH | default('') | ternary(':' ~ ansible_env.PYTHONPATH, '') }}"
+  changed_when: false
 
 - name: Encrypt Galaxy and registry secret values
   ansible.builtin.command:
-    cmd: python3 -
-    stdin: |
-      from base64 import b64encode
-      from nacl import encoding, public
-      import os
-      public_key = public.PublicKey(
-          os.environ["GITHUB_KEY"].encode("utf-8"),
-          encoding.Base64Encoder(),
-      )
-      sealed_box = public.SealedBox(public_key)
-      encrypted = sealed_box.encrypt(os.environ["SECRET_VALUE"].encode("utf-8"))
-      print(b64encode(encrypted).decode("utf-8"))
+    argv:
+      - "{{ _ee_python }}"
+      - -c
+      - |
+        from base64 import b64encode
+        from nacl import encoding, public
+        import os
+        public_key = public.PublicKey(
+            os.environ["GITHUB_KEY"].encode("utf-8"),
+            encoding.Base64Encoder(),
+        )
+        sealed_box = public.SealedBox(public_key)
+        encrypted = sealed_box.encrypt(os.environ["SECRET_VALUE"].encode("utf-8"))
+        print(b64encode(encrypted).decode("utf-8"))
   environment:
     GITHUB_KEY: "{{ _ee_secrets_pubkey.json.key }}"
     SECRET_VALUE: "{{ item.value }}"
+    PYTHONPATH: "{{ _ee_nacl_target }}{{ ansible_env.PYTHONPATH | default('') | ternary(':' ~ ansible_env.PYTHONPATH, '') }}"
   register: _ee_encrypted_secrets
   changed_when: false
   no_log: true
