@@ -213,21 +213,34 @@ redhat-developer-hub:
                             minutes: 60
                           timeout:
                             minutes: 30
+                      # Lab publishes northwind.* here; sync often so Collections isn't empty for long
                       - name: published
                         schedule:
                           frequency:
-                            minutes: 60
+                            minutes: 15
                           timeout:
                             minutes: 30
+                  # Discovers Git repos that look like Ansible collections (galaxy.yml).
+                  # providers.github was [] → Git Repositories UI stayed empty after Sync Now.
+                  # Org crawl uses integrations.github token (GITHUB_TOKEN / portal_github_token).
                   ansibleGitContents:
                     enabled: true
                     schedule:
                       frequency:
-                        minutes: 120
+                        minutes: 30
                       timeout:
                         minutes: 30
                     providers:
-                      github: []
+                      github:
+                        - name: github-lab-org
+                          host: github.com
+                          orgs:
+                            - name: AAP-Automation-Portal-Lab
+                              branches:
+                                - main
+                                - master
+                              galaxyFilePaths: []
+                              crawlDepth: 1
                       gitlab: []
           rules:
             - allow:
@@ -333,9 +346,11 @@ redhat-developer-hub:
                     priority: 10
                   importName: LogoutButton
                   mountPoint: global.header/profile
-        # false = popup OAuth (required when portal is iframed in Showroom;
-        # GitHub sets X-Frame-Options: DENY so redirect-in-iframe fails)
-        enableExperimentalRedirectFlow: false
+        # Global for ALL auth providers (cannot set AAP redirect + GitHub popup).
+        # true = in-window redirect for AAP Authorize and GitHub. Matches Ansible
+        # RHAAP docs; avoids flaky Authorize popups. For GitHub OAuth from Showroom,
+        # open the portal in a new browser tab (GitHub X-Frame-Options: DENY).
+        enableExperimentalRedirectFlow: true
         integrations:
           github:
             - host: github.com

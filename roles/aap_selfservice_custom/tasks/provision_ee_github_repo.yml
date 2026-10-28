@@ -130,11 +130,11 @@
   register: _ee_workflow_get
   no_log: true
 
-# Fine-grained PATs need Repository permissions → Workflows: Read and write
-# (Contents alone is not enough for paths under .github/workflows/).
-# Classic PATs need the workflow scope. Without it GitHub returns 403
-# "Resource not accessible by personal access token" and EE Builder later
-# fails workflow_dispatch with 404 Not Found.
+# Fine-grained PATs need BOTH:
+#   Contents: Read and write  (Contents API for any file)
+#   Workflows: Read and write (extra gate for paths under .github/workflows/)
+# Either missing → HTTP 403 "Resource not accessible by personal access token".
+# Classic PATs need repo + workflow scopes.
 - name: Seed ee-build.yml on default branch for workflow_dispatch
   ansible.builtin.uri:
     url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ _ee_gh_repo }}/contents/.github/workflows/ee-build.yml"
@@ -165,10 +165,11 @@
       {{
         (
           'Could not write .github/workflows/ee-build.yml (HTTP 403). '
-          ~ 'portal_github_token can create the repo and set secrets, but '
-          ~ 'writing workflow files requires fine-grained PAT permission '
-          ~ 'Workflows: Read and write (or classic PAT scope workflow). '
-          ~ 'Add that permission, then re-run EE repo provision.'
+          ~ 'Fine-grained portal_github_token needs Repository permissions '
+          ~ 'Contents: Read and write AND Workflows: Read and write '
+          ~ '(classic PAT: repo + workflow). Workflows alone is not enough — '
+          ~ 'the Contents API writes the file. Repo create/secrets can still '
+          ~ 'succeed without Contents. Fix the PAT, then re-run EE repo provision.'
         )
         if (_ee_workflow_seed.status | default(0)) == 403
         else (
