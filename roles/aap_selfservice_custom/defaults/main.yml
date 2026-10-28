@@ -714,6 +714,8 @@ portal_rh_console_password: !vault |
 # Creates lab-{{ guid }} team, {{ guid }}-{{ user }}-ee repo, Actions
 # Galaxy + REGISTRY secrets/vars, team push. Requires portal_github_token.
 aap_selfservice_custom_provision_ee_github_repos: true
+# On AgnosticD ACTION=destroy|stop: delete matching {{ guid }}-*-ee repos and team.
+aap_selfservice_custom_deprovision_ee_github_repos: true
 
 # -------------------------------------------------------------------
 # Lab collections (Northwind) → each instance Hub `published`

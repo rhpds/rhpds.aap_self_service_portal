@@ -3,8 +3,10 @@
 # Publish bundled Northwind collections into this instance's Hub `published`
 # repo so the portal Collections tab can sync them (pahCollections).
 #
-# Safe for multi-instance: each Hub is independent; same tarballs are uploaded
-# per AAP. Tarballs are built once on the provision host and reused.
+# Private Automation Hub expects ansible-galaxy to publish into the
+# per-namespace inbound repo:
+#   {gateway}/api/galaxy/content/inbound-{namespace}/
+# Publishing to bare /api/galaxy/ often fails or never lands in staging/published.
 #
 # Expects:
 #   aap_selfservice_custom_controller_url / _admin_username / _admin_password
@@ -16,6 +18,14 @@
     _lab_collections_src: "{{ role_path }}/files/lab_collections"
     _lab_collections_build: /tmp/portal-lab-collections-build-{{ guid | default('lab') }}
     _lab_galaxy_api: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy"
+    _lab_galaxy_inbound: >-
+      {{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}
+      /api/galaxy/content/inbound-{{ portal_lab_collection_namespace }}/
+    _lab_galaxy_cfg: /tmp/portal-lab-galaxy-{{ guid | default('lab') }}.cfg
+
+- name: Normalize inbound galaxy URL (no whitespace)
+  ansible.builtin.set_fact:
+    _lab_galaxy_inbound: "{{ _lab_galaxy_inbound | regex_replace('\\s+', '') }}"
 
 - name: Ensure lab collections build directory
   ansible.builtin.file:
@@ -72,9 +82,22 @@
   failed_when: false
   no_log: true
 
-# Wait for Hub import (do not use --no-wait). Staging→published move 404s if import
-# is still running, which left PAH:published empty while portal Sync reported "0 collections".
-- name: Publish each lab collection tarball to Hub
+# Token in temp ansible.cfg so failure output is not no_log-censored.
+# --no-wait: CLI import polling often fails on self-signed gateway TLS; we poll Hub APIs.
+- name: Write temporary galaxy server config for inbound publish
+  ansible.builtin.copy:
+    dest: "{{ _lab_galaxy_cfg }}"
+    mode: "0600"
+    content: |
+      [galaxy]
+      server_list = lab_hub_inbound
+
+      [galaxy_server.lab_hub_inbound]
+      url = {{ _lab_galaxy_inbound }}
+      token = {{ aap_selfservice_custom_oauthtoken }}
+  no_log: true
+
+- name: Publish each lab collection tarball to Hub inbound (no-wait)
   ansible.builtin.command:
     argv:
       - ansible-galaxy
@@ -82,21 +105,36 @@
       - publish
       - "{{ item }}"
       - --server
-      - "{{ _lab_galaxy_api }}/"
-      - --token
-      - "{{ aap_selfservice_custom_oauthtoken }}"
+      - lab_hub_inbound
       - --ignore-certs
+      - --no-wait
+  environment:
+    ANSIBLE_CONFIG: "{{ _lab_galaxy_cfg }}"
   loop: "{{ _lab_collection_tarballs }}"
   register: _lab_collection_publish
   changed_when: >-
-    'is already present' not in (_lab_collection_publish.stdout | default(''))
-    and 'is already present' not in (_lab_collection_publish.stderr | default(''))
-  failed_when: >-
-    (_lab_collection_publish.rc | default(1)) != 0
-    and ('already' not in (_lab_collection_publish.stdout | default('') ~ _lab_collection_publish.stderr | default('')) | lower)
-  no_log: true
+    'already' not in (
+      (_lab_collection_publish.stdout | default('')) ~ ' ' ~
+      (_lab_collection_publish.stderr | default(''))
+    ) | lower
+  failed_when: false
   loop_control:
     label: "{{ item | basename }}"
+
+- name: Fail with ansible-galaxy publish output when upload failed
+  ansible.builtin.fail:
+    msg: >-
+      ansible-galaxy publish failed for {{ item.item | basename }}
+      (rc={{ item.rc | default('?') }}).
+      inbound_url={{ _lab_galaxy_inbound }}
+      stdout: {{ item.stdout | default('') }}
+      stderr: {{ item.stderr | default('') }}
+  when:
+    - (item.rc | default(0)) != 0
+    - ('already' not in ((item.stdout | default('')) ~ ' ' ~ (item.stderr | default(''))) | lower)
+  loop: "{{ _lab_collection_publish.results }}"
+  loop_control:
+    label: "{{ item.item | basename }}"
 
 # Tarball name: <namespace>-<name>-<version>.tar.gz
 - name: Resolve collection namespace/name/version from each tarball name
@@ -113,7 +151,7 @@
   loop_control:
     label: "{{ item | basename }}"
 
-- name: Wait until each collection version is importable in Hub
+- name: Wait until each collection version appears in Hub staging
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/staging/collections/index/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/"
     method: GET
@@ -123,7 +161,7 @@
     status_code: [200, 404]
   register: _lab_staging_get
   until: (_lab_staging_get.status | default(0)) == 200
-  retries: 30
+  retries: 36
   delay: 5
   loop: "{{ _lab_collection_coords }}"
   failed_when: false
@@ -131,27 +169,45 @@
   loop_control:
     label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
 
-# Prefer staging copy when present; some Hub configs land directly in published.
-- name: Move lab collections from staging to published
+- name: Check whether collections already landed in published
   ansible.builtin.uri:
-    url: "{{ _lab_galaxy_api }}/v3/collections/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/move/staging/published/"
+    url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/published/collections/index/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: [200, 404]
+  register: _lab_published_version_get
+  loop: "{{ _lab_collection_coords }}"
+  failed_when: false
+  no_log: true
+  loop_control:
+    label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
+
+- name: Move lab collections from staging to published when needed
+  ansible.builtin.uri:
+    url: "{{ _lab_galaxy_api }}/v3/collections/{{ item.item.namespace }}/{{ item.item.name }}/versions/{{ item.item.version }}/move/staging/published/"
     method: POST
     headers:
       Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     status_code: [200, 201, 202, 204, 400, 404]
     return_content: true
-  loop: "{{ _lab_collection_coords }}"
+  loop: "{{ _lab_published_version_get.results }}"
+  when:
+    - (item.status | default(0)) != 200
+    - (_lab_staging_get.results[ansible_loop.index0].status | default(0)) == 200
   register: _lab_collection_move
   failed_when: false
   no_log: true
   loop_control:
-    label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
+    label: "{{ item.item.namespace }}.{{ item.item.name }}:{{ item.item.version }}"
+    extended: true
 
-- name: Wait briefly for Hub move tasks
+- name: Wait briefly for Hub move/import tasks
   ansible.builtin.pause:
     seconds: 20
-    prompt: "Waiting for Hub to finish moving Northwind collections into published..."
+    prompt: "Waiting for Hub to finish publishing Northwind collections..."
 
 - name: Verify each lab collection is visible in Hub published
   ansible.builtin.uri:
@@ -163,7 +219,7 @@
     status_code: [200, 404]
   register: _lab_published_get
   until: (_lab_published_get.status | default(0)) == 200
-  retries: 24
+  retries: 36
   delay: 5
   loop: "{{ _lab_collection_coords }}"
   no_log: true
@@ -176,14 +232,21 @@
       - (_lab_published_get.results | map(attribute='status') | list | min) == 200
     fail_msg: >-
       Hub `published` is missing one or more Northwind collections after publish/move.
-      Portal Sync will report "0 collections synced from PAH:published".
-      Check ansible-galaxy publish output and staging→published approval/move on
-      {{ aap_selfservice_custom_controller_url }}.
+      Staging HTTP statuses={{ _lab_staging_get.results | map(attribute='status') | list }}.
+      inbound_url={{ _lab_galaxy_inbound }}.
+      Check Hub UI Imports/Approval on {{ aap_selfservice_custom_controller_url }}.
+
+- name: Remove temporary galaxy server config
+  ansible.builtin.file:
+    path: "{{ _lab_galaxy_cfg }}"
+    state: absent
+  no_log: true
 
 - name: Report lab collections publish status
   ansible.builtin.debug:
     msg: >-
       Published {{ portal_lab_collections | length }} Northwind collection(s)
       to {{ aap_selfservice_custom_controller_url }} Hub published
+      via {{ _lab_galaxy_inbound }}
       (namespace={{ portal_lab_collection_namespace }}).
       Portal Collections → Sync Now should list northwind.*.

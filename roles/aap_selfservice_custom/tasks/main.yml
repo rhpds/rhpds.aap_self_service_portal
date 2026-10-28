@@ -7,6 +7,10 @@
 #
 # Supports both single-instance and multi-user deployments
 # Uses agnosticd_user_data lookup to get AAP instance information
+#
+# AgnosticD ACTION:
+#   create/provision (default) — demo content + EE GitHub repos
+#   destroy/stop — delete EE GitHub repos ({{ guid }}-*-ee) and team lab-{{ guid }}
 
 - name: Display role banner
   ansible.builtin.debug:
@@ -14,108 +18,138 @@
       - "========================================="
       - "AAP Self-Service Custom Content"
       - "========================================="
-      - "Configuring AAP with demo users, inventories, credentials, and job templates"
+      - >-
+        Action: {{ ACTION | default('create') }}
+        ({{ 'deprovision EE GitHub' if (ACTION | default('create')) in ['destroy', 'stop']
+           else 'configure AAP demo content' }})
 
 # -------------------------------------------------------------------
-# Get AAP Instance Information from Previous Workload
+# Destroy / stop — GitHub EE cleanup (repos + team)
 # -------------------------------------------------------------------
-- name: Check if multi-user mode is enabled
-  ansible.builtin.set_fact:
-    _aap_multi_user_mode: "{{ lookup('agnosticd_user_data', 'aap_multi_user_mode') | default(false) | bool }}"
+- name: Deprovision EE Builder GitHub repos and lab team
+  when:
+    - ACTION is defined
+    - ACTION in ['destroy', 'stop']
+    - aap_selfservice_custom_deprovision_ee_github_repos | default(true) | bool
+    - portal_github_token is defined
+    - (portal_github_token | default('') | trim | length) > 0
+  ansible.builtin.include_tasks: deprovision_ee_github.yml
 
-- name: Display deployment mode
+- name: Skip EE GitHub deprovision when token missing
+  when:
+    - ACTION is defined
+    - ACTION in ['destroy', 'stop']
+    - aap_selfservice_custom_deprovision_ee_github_repos | default(true) | bool
+    - (portal_github_token | default('') | trim | length) == 0
   ansible.builtin.debug:
-    msg: "Deployment mode: {{ 'Multi-user' if _aap_multi_user_mode else 'Single instance' }}"
-
-# Shared once for all instances — Hub remotes need the same console.redhat.com offline token
-- name: Retrieve console.redhat.com Hub offline token
-  ansible.builtin.include_tasks: retrieve_rh_hub_offline_token.yml
+    msg: >-
+      Skipping EE GitHub deprovision: portal_github_token empty.
+      Manual cleanup may be needed for {{ guid | default('?') }}-*-ee
+      and team lab-{{ guid | default('?') }}.
 
 # -------------------------------------------------------------------
-# Single Instance Mode
+# Create / provision — demo content
 # -------------------------------------------------------------------
-- name: Configure single AAP instance
-  when: not _aap_multi_user_mode
+- name: Configure AAP demo content (create/provision)
+  when: ACTION is not defined or ACTION == "create" or ACTION == "provision"
   block:
-    - name: Get single instance AAP connection details
+    - name: Check if multi-user mode is enabled
       ansible.builtin.set_fact:
-        _aap_single_instance:
-          controller_url: "{{ lookup('agnosticd_user_data', 'aap_controller_url') | default('') }}"
-          admin_username: "{{ lookup('agnosticd_user_data', 'aap_admin_username') | default('admin') }}"
-          admin_password: "{{ lookup('agnosticd_user_data', 'aap_admin_password') | default('') }}"
+        _aap_multi_user_mode: "{{ lookup('agnosticd_user_data', 'aap_multi_user_mode') | default(false) | bool }}"
 
-    - name: Validate single instance connection details
-      ansible.builtin.assert:
-        that:
-          - _aap_single_instance.controller_url | length > 0
-          - _aap_single_instance.admin_password | length > 0
-        fail_msg: "AAP connection details not found. Ensure ocp4_workload_aap_multiinstance ran successfully."
-        success_msg: "AAP connection details retrieved successfully"
+    - name: Display deployment mode
+      ansible.builtin.debug:
+        msg: "Deployment mode: {{ 'Multi-user' if _aap_multi_user_mode else 'Single instance' }}"
 
-    - name: Configure single AAP instance with demo content
-      ansible.builtin.include_tasks: setup_instance_content.yml
-      vars:
-        aap_selfservice_custom_controller_url: "{{ _aap_single_instance.controller_url }}"
-        aap_selfservice_custom_admin_username: "{{ _aap_single_instance.admin_username }}"
-        aap_selfservice_custom_admin_password: "{{ _aap_single_instance.admin_password }}"
-        instance_label: "single instance"
-        instance_lab_user: "user1"
+    # Shared once for all instances — Hub remotes need the same console.redhat.com offline token
+    - name: Retrieve console.redhat.com Hub offline token
+      ansible.builtin.include_tasks: retrieve_rh_hub_offline_token.yml
 
-# -------------------------------------------------------------------
-# Multi-User Mode
-# -------------------------------------------------------------------
-- name: Configure multiple AAP instances
-  when: _aap_multi_user_mode
-  block:
-    - name: Get multi-user AAP instances list
-      ansible.builtin.set_fact:
-        _aap_instances: "{{ lookup('agnosticd_user_data', 'aap_instances') | default([]) }}"
+    # -------------------------------------------------------------------
+    # Single Instance Mode
+    # -------------------------------------------------------------------
+    - name: Configure single AAP instance
+      when: not _aap_multi_user_mode
+      block:
+        - name: Get single instance AAP connection details
+          ansible.builtin.set_fact:
+            _aap_single_instance:
+              controller_url: "{{ lookup('agnosticd_user_data', 'aap_controller_url') | default('') }}"
+              admin_username: "{{ lookup('agnosticd_user_data', 'aap_admin_username') | default('admin') }}"
+              admin_password: "{{ lookup('agnosticd_user_data', 'aap_admin_password') | default('') }}"
 
-    - name: Get common admin username
-      ansible.builtin.set_fact:
-        _aap_common_admin_username: "{{ lookup('agnosticd_user_data', 'aap_admin_username') | default('admin') }}"
+        - name: Validate single instance connection details
+          ansible.builtin.assert:
+            that:
+              - _aap_single_instance.controller_url | length > 0
+              - _aap_single_instance.admin_password | length > 0
+            fail_msg: "AAP connection details not found. Ensure ocp4_workload_aap_multiinstance ran successfully."
+            success_msg: "AAP connection details retrieved successfully"
 
-    - name: Validate multi-user instance list
-      ansible.builtin.assert:
-        that:
-          - _aap_instances | length > 0
-        fail_msg: "No AAP instances found. Ensure ocp4_workload_aap_multiinstance ran in multi-user mode."
-        success_msg: "Found {{ _aap_instances | length }} AAP instances to configure"
+        - name: Configure single AAP instance with demo content
+          ansible.builtin.include_tasks: setup_instance_content.yml
+          vars:
+            aap_selfservice_custom_controller_url: "{{ _aap_single_instance.controller_url }}"
+            aap_selfservice_custom_admin_username: "{{ _aap_single_instance.admin_username }}"
+            aap_selfservice_custom_admin_password: "{{ _aap_single_instance.admin_password }}"
+            instance_label: "single instance"
+            instance_lab_user: "user1"
 
-    - name: Display multi-user configuration plan
+    # -------------------------------------------------------------------
+    # Multi-User Mode
+    # -------------------------------------------------------------------
+    - name: Configure multiple AAP instances
+      when: _aap_multi_user_mode
+      block:
+        - name: Get multi-user AAP instances list
+          ansible.builtin.set_fact:
+            _aap_instances: "{{ lookup('agnosticd_user_data', 'aap_instances') | default([]) }}"
+
+        - name: Get common admin username
+          ansible.builtin.set_fact:
+            _aap_common_admin_username: "{{ lookup('agnosticd_user_data', 'aap_admin_username') | default('admin') }}"
+
+        - name: Validate multi-user instance list
+          ansible.builtin.assert:
+            that:
+              - _aap_instances | length > 0
+            fail_msg: "No AAP instances found. Ensure ocp4_workload_aap_multiinstance ran in multi-user mode."
+            success_msg: "Found {{ _aap_instances | length }} AAP instances to configure"
+
+        - name: Display multi-user configuration plan
+          ansible.builtin.debug:
+            msg:
+              - "Configuring {{ _aap_instances | length }} AAP instances with demo content"
+              - "Users: {{ _aap_instances | map(attribute='user') | list | join(', ') }}"
+
+        - name: Configure each AAP instance with demo content
+          ansible.builtin.include_tasks: setup_instance_content.yml
+          vars:
+            aap_selfservice_custom_controller_url: "https://{{ aap_instance.route }}"
+            aap_selfservice_custom_admin_username: "{{ _aap_common_admin_username }}"
+            aap_selfservice_custom_admin_password: "{{ aap_instance.password }}"
+            instance_label: "{{ aap_instance.user }}"
+            instance_lab_user: "{{ aap_instance.user }}"
+          loop: "{{ _aap_instances }}"
+          loop_control:
+            loop_var: aap_instance
+            label: "{{ aap_instance.user }} - {{ aap_instance.route }}"
+
+    # -------------------------------------------------------------------
+    # Summary
+    # -------------------------------------------------------------------
+    - name: Display completion summary
       ansible.builtin.debug:
         msg:
-          - "Configuring {{ _aap_instances | length }} AAP instances with demo content"
-          - "Users: {{ _aap_instances | map(attribute='user') | list | join(', ') }}"
-
-    - name: Configure each AAP instance with demo content
-      ansible.builtin.include_tasks: setup_instance_content.yml
-      vars:
-        aap_selfservice_custom_controller_url: "https://{{ aap_instance.route }}"
-        aap_selfservice_custom_admin_username: "{{ _aap_common_admin_username }}"
-        aap_selfservice_custom_admin_password: "{{ aap_instance.password }}"
-        instance_label: "{{ aap_instance.user }}"
-        instance_lab_user: "{{ aap_instance.user }}"
-      loop: "{{ _aap_instances }}"
-      loop_control:
-        loop_var: aap_instance
-        label: "{{ aap_instance.user }} - {{ aap_instance.route }}"
-
-# -------------------------------------------------------------------
-# Summary
-# -------------------------------------------------------------------
-- name: Display completion summary
-  ansible.builtin.debug:
-    msg:
-      - "========================================="
-      - "AAP Custom Content Configuration Complete"
-      - "========================================="
-      - "Configured {{ _aap_instances | length if _aap_multi_user_mode else 1 }} AAP instance(s)"
-      - ""
-      - "Demo content added:"
-      - "  - {{ aap_selfservice_custom_users | length }} users"
-      - "  - {{ aap_selfservice_custom_inventories | length }} inventories"
-      - "  - {{ aap_selfservice_custom_credentials | length }} credentials"
-      - "  - {{ aap_selfservice_custom_projects | length }} projects"
-      - "  - {{ aap_selfservice_custom_labels | length }} labels"
-      - "  - {{ aap_selfservice_custom_job_templates | length }} job templates"
+          - "========================================="
+          - "AAP Custom Content Configuration Complete"
+          - "========================================="
+          - "Configured {{ _aap_instances | length if _aap_multi_user_mode else 1 }} AAP instance(s)"
+          - ""
+          - "Demo content added:"
+          - "  - {{ aap_selfservice_custom_users | length }} users"
+          - "  - {{ aap_selfservice_custom_inventories | length }} inventories"
+          - "  - {{ aap_selfservice_custom_credentials | length }} credentials"
+          - "  - {{ aap_selfservice_custom_projects | length }} projects"
+          - "  - {{ aap_selfservice_custom_labels | length }} labels"
+          - "  - {{ aap_selfservice_custom_job_templates | length }} job templates"
