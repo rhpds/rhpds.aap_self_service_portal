@@ -163,7 +163,7 @@
     aap_namespace: "{{ item.namespace }}"
     openshift_namespace: "{{ item.namespace }}-ssap"
     aap_ssl_verify: false
-    aap_oauth_client_name: "Self Service Portal"
+    aap_oauth_client_name: "Automation Portal"
     aap_organization: "Default"
   loop: "{{ _aap_multi_user_info }}"
   loop_control:
@@ -221,7 +221,7 @@
     aap_namespace: "{{ ocp4_workload_aap_multiinstance_namespace }}"
     openshift_namespace: "{{ ocp4_workload_aap_multiinstance_namespace }}-ssap"
     aap_ssl_verify: false
-    aap_oauth_client_name: "Self Service Portal"
+    aap_oauth_client_name: "Automation Portal"
     aap_organization: "Default"
   when: not ocp4_workload_aap_multiinstance_multi_user | bool
 
@@ -248,7 +248,7 @@
       AAP Controller URL: {{ _aap_deployment_info.controller_url }}
       Admin Username: {{ _aap_deployment_info.admin_username }}
       Admin Password: {{ _aap_deployment_info.admin_password }}
-      Self-Service Portal: https://{{ _portal_route_single.resources[0].spec.host }}
+      Automation Portal: https://{{ _portal_route_single.resources[0].spec.host }}
     data:
       aap_controller_url: "{{ _aap_deployment_info.controller_url }}"
       aap_admin_username: "{{ _aap_deployment_info.admin_username }}"
@@ -279,7 +279,7 @@
       AAP Admin Username: {{ ocp4_workload_aap_multiinstance_admin_username }}
       AAP Admin Password: {{ item.item.password }}
       AAP Namespace: {{ item.item.namespace }}
-      Self-Service Portal: https://{{ item.resources[0].spec.host }}
+      Automation Portal: https://{{ item.resources[0].spec.host }}
     data:
       openshift_username: "{{ item.item.user }}"
       openshift_password: "{{ ocp4_workload_aap_multiinstance_user_password }}"

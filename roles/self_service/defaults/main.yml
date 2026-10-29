@@ -13,7 +13,7 @@ rhdh_image_tag: "1.10"
 controller_host: "" # AAP Controler Route  
 oauth_redirect_uri_suffix: "/api/auth/rhaap/handler/frame"
 controller_verify_ssl: false
-aap_oauth_client_name: "Self Service"
+aap_oauth_client_name: "Automation Portal"
 aap_organization: "Default"
 aap_ssl_verify: false
 

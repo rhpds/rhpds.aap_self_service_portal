@@ -73,7 +73,7 @@ ocp4_workload_aap_multiinstance_grant_user_access: true
 ocp4_workload_aap_multiinstance_user_role: admin
 
 # ---------------------------------------------------------------
-# Self-Service Portal Deployment
+# Automation Portal Deployment
 # ---------------------------------------------------------------
 # Deploy self-service portal automatically after AAP deployment
 ocp4_workload_aap_multiinstance_deploy_self_service: true
