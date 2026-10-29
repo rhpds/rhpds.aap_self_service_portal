@@ -3,15 +3,14 @@
 # Publish bundled Northwind collections into this instance's Hub `published`
 # repo so the portal Collections tab can sync them (pahCollections).
 #
-# Prefer per-namespace inbound:
+# Publish into per-namespace inbound:
 #   {gateway}/api/galaxy/content/inbound-{namespace}/
-# which exists only after the Hub namespace is created (UI API creates the
-# inbound pulp repo/distribution). If inbound is still missing, fall back to
-# root /api/galaxy/ (galaxy-ng "published" upload endpoint).
+# AAP often leaves inbound missing after namespace create, so this task file
+# creates the pulp ansible repository + distribution explicitly (Basic auth),
+# then publishes with admin username/password via ansible-galaxy.
 #
 # Expects:
 #   aap_selfservice_custom_controller_url / _admin_username / _admin_password
-#   aap_selfservice_custom_oauthtoken (from create_gateway_token.yml)
 #   portal_lab_collections (list of dir names under files/lab_collections/)
 
 - name: Set lab collections workdir
@@ -61,13 +60,21 @@
           Expected {{ portal_lab_collections | length }} collection tarballs in
           {{ _lab_collections_build }}, found {{ _lab_collection_tarballs | length }}.
 
-# UI namespace API creates the inbound-{ns} pulp repo; v3 alone often does not.
-- name: Create Hub namespace via UI API (creates inbound repo)
+# Hub pulp APIs want Basic auth (same pattern as configure_hub_remotes.yml).
+# Gateway Bearer often creates a namespace record without an inbound distribution;
+# root /api/galaxy/ publish then "succeeds" with --no-wait but never lands in staging.
+- name: Set Hub pulp API base and inbound names
+  ansible.builtin.set_fact:
+    _lab_hub_pulp: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy/pulp/api/v3"
+    _lab_inbound_name: "inbound-{{ portal_lab_collection_namespace }}"
+
+- name: Create Hub namespace via UI API (basic auth)
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/_ui/v1/namespaces/"
     method: POST
-    headers:
-      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
     body_format: json
     body:
       name: "{{ portal_lab_collection_namespace }}"
@@ -77,13 +84,15 @@
     return_content: true
   register: _lab_ns_ui_create
   failed_when: false
+  no_log: true
 
-- name: Create Hub namespace via v3 API (fallback)
+- name: Create Hub namespace via v3 API (fallback, basic auth)
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/v3/namespaces/"
     method: POST
-    headers:
-      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
     body_format: json
     body:
       name: "{{ portal_lab_collection_namespace }}"
@@ -93,14 +102,16 @@
     return_content: true
   register: _lab_ns_v3_create
   failed_when: false
+  no_log: true
   when: (_lab_ns_ui_create.status | default(0)) not in [201, 204, 400, 409]
 
 - name: Confirm Hub namespace exists
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/_ui/v1/namespaces/?name={{ portal_lab_collection_namespace }}"
     method: GET
-    headers:
-      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     status_code: [200]
     return_content: true
@@ -111,10 +122,8 @@
   ansible.builtin.fail:
     msg: >-
       Hub namespace '{{ portal_lab_collection_namespace }}' missing after create.
-      UI create HTTP={{ _lab_ns_ui_create.status | default('n/a') }}
-      body={{ _lab_ns_ui_create.content | default('') | truncate(400) }}.
-      v3 create HTTP={{ _lab_ns_v3_create.status | default('n/a') }}
-      body={{ _lab_ns_v3_create.content | default('') | truncate(400) }}.
+      UI create HTTP={{ _lab_ns_ui_create.status | default('n/a') }}.
+      v3 create HTTP={{ _lab_ns_v3_create.status | default('n/a') }}.
       GET HTTP={{ _lab_ns_get.status | default('n/a') }}
       content={{ _lab_ns_get.content | default('') | truncate(400) }}.
   when: >-
@@ -127,12 +136,111 @@
       ) | int
     ) < 1
 
+- name: Look up inbound ansible repository
+  ansible.builtin.uri:
+    url: "{{ _lab_hub_pulp }}/repositories/ansible/ansible/?name={{ _lab_inbound_name | urlencode }}"
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: 200
+  register: _lab_inbound_repo_list
+
+- name: Create inbound ansible repository when missing
+  ansible.builtin.uri:
+    url: "{{ _lab_hub_pulp }}/repositories/ansible/ansible/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body:
+      name: "{{ _lab_inbound_name }}"
+      description: "Inbound uploads for {{ portal_lab_collection_namespace }}"
+      retain_repo_versions: 1
+      pulp_labels:
+        pipeline: staging
+    status_code: [201, 202]
+    return_content: true
+  register: _lab_inbound_repo_create
+  when: (_lab_inbound_repo_list.json.results | default([]) | length) == 0
+
+- name: Set inbound repository pulp_href
+  ansible.builtin.set_fact:
+    _lab_inbound_repo_href: >-
+      {{
+        _lab_inbound_repo_create.json.pulp_href
+        if (_lab_inbound_repo_create is defined and not (_lab_inbound_repo_create.skipped | default(false))
+            and (_lab_inbound_repo_create.json.pulp_href | default('')))
+        else (_lab_inbound_repo_list.json.results[0].pulp_href | default(''))
+      }}
+
+- name: Look up inbound ansible distribution
+  ansible.builtin.uri:
+    url: "{{ _lab_hub_pulp }}/distributions/ansible/ansible/?name={{ _lab_inbound_name | urlencode }}"
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: 200
+  register: _lab_inbound_dist_list
+
+- name: Create inbound ansible distribution when missing
+  ansible.builtin.uri:
+    url: "{{ _lab_hub_pulp }}/distributions/ansible/ansible/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body:
+      name: "{{ _lab_inbound_name }}"
+      base_path: "{{ _lab_inbound_name }}"
+      repository: "{{ _lab_inbound_repo_href }}"
+    status_code: [201, 202]
+    return_content: true
+  register: _lab_inbound_dist_create
+  when:
+    - (_lab_inbound_repo_href | length) > 0
+    - (_lab_inbound_dist_list.json.results | default([]) | length) == 0
+
+- name: Wait for inbound distribution create task when async
+  when:
+    - _lab_inbound_dist_create is defined
+    - not (_lab_inbound_dist_create.skipped | default(false))
+    - (_lab_inbound_dist_create.json.task | default('') | length) > 0
+  ansible.builtin.uri:
+    url: >-
+      {{
+        _lab_inbound_dist_create.json.task
+        if (_lab_inbound_dist_create.json.task | regex_search('^https?://'))
+        else (
+          (aap_selfservice_custom_controller_url | regex_replace('/$', ''))
+          ~ _lab_inbound_dist_create.json.task
+        )
+      }}
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: 200
+  register: _lab_inbound_dist_task
+  until: (_lab_inbound_dist_task.json.state | default('')) in ['completed', 'failed', 'canceled']
+  retries: 30
+  delay: 2
+
 - name: Wait for inbound distribution to become available
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_inbound }}"
     method: GET
-    headers:
-      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     status_code: [200, 401, 403, 404]
   register: _lab_inbound_probe
@@ -141,30 +249,21 @@
   delay: 5
   failed_when: false
 
-- name: Choose galaxy publish URL (inbound if present, else root /api/galaxy/)
-  ansible.builtin.set_fact:
-    _lab_galaxy_publish_url: >-
-      {{
-        _lab_galaxy_inbound
-        if (_lab_inbound_probe.status | default(0)) in [200, 401, 403]
-        else (_lab_galaxy_api ~ '/')
-      }}
-    _lab_galaxy_publish_mode: >-
-      {{
-        'inbound'
-        if (_lab_inbound_probe.status | default(0)) in [200, 401, 403]
-        else 'root'
-      }}
-
-- name: Warn when falling back to root galaxy publish URL
-  ansible.builtin.debug:
+- name: Fail if inbound distribution is still missing
+  ansible.builtin.fail:
     msg: >-
-      inbound {{ _lab_galaxy_inbound }} returned HTTP
-      {{ _lab_inbound_probe.status | default('n/a') }}; publishing via
-      {{ _lab_galaxy_publish_url }} instead.
-  when: _lab_galaxy_publish_mode == 'root'
+      Hub inbound distribution missing after pulp create:
+      {{ _lab_galaxy_inbound }} HTTP={{ _lab_inbound_probe.status | default('n/a') }}.
+      repo_href={{ _lab_inbound_repo_href | default('n/a') }}.
+      dist_create={{ _lab_inbound_dist_create.status | default('skipped') }}.
+  when: (_lab_inbound_probe.status | default(0)) not in [200, 401, 403]
 
-# Token in temp ansible.cfg so failure output is not no_log-censored.
+- name: Set galaxy publish URL to inbound
+  ansible.builtin.set_fact:
+    _lab_galaxy_publish_url: "{{ _lab_galaxy_inbound }}"
+    _lab_galaxy_publish_mode: inbound
+
+# Prefer admin basic auth for ansible-galaxy (works with Hub pulp/galaxy).
 # --no-wait: CLI import polling often fails on self-signed gateway TLS; we poll Hub APIs.
 - name: Write temporary galaxy server config for publish
   ansible.builtin.copy:
@@ -176,10 +275,11 @@
 
       [galaxy_server.lab_hub_publish]
       url = {{ _lab_galaxy_publish_url | trim }}
-      token = {{ aap_selfservice_custom_oauthtoken }}
+      username = {{ aap_selfservice_custom_admin_username }}
+      password = {{ aap_selfservice_custom_admin_password }}
   no_log: true
 
-- name: Publish each lab collection tarball to Hub (no-wait)
+- name: Publish each lab collection tarball to Hub inbound (no-wait)
   ansible.builtin.command:
     argv:
       - ansible-galaxy
@@ -202,6 +302,16 @@
   failed_when: false
   loop_control:
     label: "{{ item | basename }}"
+
+- name: Show ansible-galaxy publish results
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item | basename }}: rc={{ item.rc | default('?') }}
+      stdout={{ item.stdout | default('') | truncate(300) }}
+      stderr={{ item.stderr | default('') | truncate(300) }}
+  loop: "{{ _lab_collection_publish.results }}"
+  loop_control:
+    label: "{{ item.item | basename }}"
 
 - name: Fail with ansible-galaxy publish output when upload failed
   ansible.builtin.fail:
@@ -238,8 +348,9 @@
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/staging/collections/index/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/"
     method: GET
-    headers:
-      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     status_code: [200, 404]
   register: _lab_staging_get
@@ -248,7 +359,6 @@
   delay: 5
   loop: "{{ _lab_collection_coords }}"
   failed_when: false
-  no_log: true
   loop_control:
     label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
 
@@ -256,14 +366,14 @@
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/published/collections/index/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/"
     method: GET
-    headers:
-      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     status_code: [200, 404]
   register: _lab_published_version_get
   loop: "{{ _lab_collection_coords }}"
   failed_when: false
-  no_log: true
   loop_control:
     label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
 
@@ -271,8 +381,9 @@
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/v3/collections/{{ item.item.namespace }}/{{ item.item.name }}/versions/{{ item.item.version }}/move/staging/published/"
     method: POST
-    headers:
-      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     status_code: [200, 201, 202, 204, 400, 404]
     return_content: true
@@ -282,7 +393,6 @@
     - (_lab_staging_get.results[ansible_loop.index0].status | default(0)) == 200
   register: _lab_collection_move
   failed_when: false
-  no_log: true
   loop_control:
     label: "{{ item.item.namespace }}.{{ item.item.name }}:{{ item.item.version }}"
     extended: true
@@ -296,8 +406,9 @@
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/published/collections/index/{{ item.namespace }}/{{ item.name }}/"
     method: GET
-    headers:
-      Authorization: "Bearer {{ aap_selfservice_custom_oauthtoken }}"
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     status_code: [200, 404]
   register: _lab_published_get
@@ -305,7 +416,7 @@
   retries: 36
   delay: 5
   loop: "{{ _lab_collection_coords }}"
-  no_log: true
+  failed_when: false
   loop_control:
     label: "{{ item.namespace }}.{{ item.name }}"
 
