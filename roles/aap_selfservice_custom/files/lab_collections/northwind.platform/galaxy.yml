@@ -9,10 +9,8 @@ description: >
   change-window guards, and standard operating playbooks used by Controller
   and the Self-Service Automation Portal.
 license_file: LICENSE
-tags: [northwind, platform, infrastructure, linux]
-dependencies:
-  ansible.posix: '>=1.5.0'
-  community.general: '>=8.0.0'
+tags: [infrastructure, linux, tools]
+dependencies: {}
 repository: https://github.com/AAP-Automation-Portal-Lab/aap_lab.platform
 documentation: https://github.com/AAP-Automation-Portal-Lab/aap_lab.platform/blob/main/README.md
 homepage: https://northwind.example

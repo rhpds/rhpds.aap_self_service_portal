@@ -1,24 +1,22 @@
 ---
 # SPDX-License-Identifier: MIT-0
-# Publish bundled Northwind collections into this instance's Hub `published`
-# repo so the portal Collections tab can sync them (pahCollections).
+# Put Northwind lab collections into Hub `published` for portal pahCollections.
 #
-# Documented galaxy-ng upload path (not handmade inbound repos):
-#   ansible-galaxy publish → {gateway}/api/galaxy/
-# with admin username/password. That runs the import pipeline into `staging`
-# (or straight to `published` if auto-approve). We then move staging → published.
+# ansible-galaxy publish + staging/import has been unreliable on AAP gateway
+# labs (upload returns "pushed", import never appears). Upload the tarball
+# straight into pulp as a collection_version, then add it to the `published`
+# repository — same end state, no staging/approval dance.
 #
 # Expects:
 #   aap_selfservice_custom_controller_url / _admin_username / _admin_password
-#   portal_lab_collections (list of dir names under files/lab_collections/)
+#   portal_lab_collections
 
-- name: Set lab collections workdir
+- name: Set lab collections paths
   ansible.builtin.set_fact:
     _lab_collections_src: "{{ role_path }}/files/lab_collections"
     _lab_collections_build: /tmp/portal-lab-collections-build-{{ guid | default('lab') }}
     _lab_galaxy_api: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy"
-    _lab_galaxy_publish_url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy/"
-    _lab_galaxy_cfg: /tmp/portal-lab-galaxy-{{ guid | default('lab') }}.cfg
+    _lab_hub_pulp: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy/pulp/api/v3"
 
 - name: Ensure lab collections build directory
   ansible.builtin.file:
@@ -56,11 +54,10 @@
         that:
           - (_lab_collection_tarballs | length) == (portal_lab_collections | length)
         fail_msg: >-
-          Expected {{ portal_lab_collections | length }} collection tarballs in
-          {{ _lab_collections_build }}, found {{ _lab_collection_tarballs | length }}.
+          Expected {{ portal_lab_collections | length }} collection tarballs,
+          found {{ _lab_collection_tarballs | length }}.
 
-# Namespace must exist before upload. Use Basic auth (same as Hub remotes).
-- name: Create Hub namespace via UI API (basic auth)
+- name: Create Hub namespace for lab collections
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/_ui/v1/namespaces/"
     method: POST
@@ -73,128 +70,177 @@
       groups: []
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     status_code: [201, 204, 400, 409]
-    return_content: true
-  register: _lab_ns_ui_create
   failed_when: false
   no_log: true
 
-- name: Create Hub namespace via v3 API (fallback, basic auth)
+- name: Look up Hub published repository
   ansible.builtin.uri:
-    url: "{{ _lab_galaxy_api }}/v3/namespaces/"
-    method: POST
-    user: "{{ aap_selfservice_custom_admin_username }}"
-    password: "{{ aap_selfservice_custom_admin_password }}"
-    force_basic_auth: true
-    body_format: json
-    body:
-      name: "{{ portal_lab_collection_namespace }}"
-      groups: []
-    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    status_code: [201, 204, 400, 409]
-    return_content: true
-  register: _lab_ns_v3_create
-  failed_when: false
-  no_log: true
-  when: (_lab_ns_ui_create.status | default(0)) not in [201, 204, 400, 409]
-
-- name: Confirm Hub namespace exists
-  ansible.builtin.uri:
-    url: "{{ _lab_galaxy_api }}/_ui/v1/namespaces/?name={{ portal_lab_collection_namespace }}"
+    url: "{{ _lab_hub_pulp }}/repositories/ansible/ansible/?name=published"
     method: GET
     user: "{{ aap_selfservice_custom_admin_username }}"
     password: "{{ aap_selfservice_custom_admin_password }}"
     force_basic_auth: true
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    status_code: [200]
-    return_content: true
-  register: _lab_ns_get
-  failed_when: false
+    status_code: 200
+  register: _lab_published_repo
 
-- name: Fail if Hub namespace could not be created or found
-  ansible.builtin.fail:
-    msg: >-
-      Hub namespace '{{ portal_lab_collection_namespace }}' missing after create.
-      UI create HTTP={{ _lab_ns_ui_create.status | default('n/a') }}.
-      v3 create HTTP={{ _lab_ns_v3_create.status | default('n/a') }}.
-      GET HTTP={{ _lab_ns_get.status | default('n/a') }}
-      content={{ _lab_ns_get.content | default('') | truncate(400) }}.
-  when: >-
-    (_lab_ns_get.status | default(0)) != 200
-    or (
-      (
-        _lab_ns_get.json.meta.count
-        | default(_lab_ns_get.json.count
-        | default((_lab_ns_get.json.data | default(_lab_ns_get.json.results | default([]))) | length))
-      ) | int
-    ) < 1
+- name: Require published repository
+  ansible.builtin.assert:
+    that:
+      - (_lab_published_repo.json.results | default([]) | length) > 0
+    fail_msg: Hub has no ansible repository named 'published'.
 
-# Prefer admin basic auth for ansible-galaxy (Hub pulp/galaxy).
-# --no-wait: CLI import polling often fails on self-signed gateway TLS; we poll Hub APIs.
-- name: Write temporary galaxy server config for publish
-  ansible.builtin.copy:
-    dest: "{{ _lab_galaxy_cfg }}"
-    mode: "0600"
-    content: |
-      [galaxy]
-      server_list = lab_hub_publish
+- name: Set published repository href
+  ansible.builtin.set_fact:
+    _lab_published_repo_href: "{{ _lab_published_repo.json.results[0].pulp_href }}"
 
-      [galaxy_server.lab_hub_publish]
-      url = {{ _lab_galaxy_publish_url }}
-      username = {{ aap_selfservice_custom_admin_username }}
-      password = {{ aap_selfservice_custom_admin_password }}
-  no_log: true
-
-- name: Publish each lab collection tarball to Hub /api/galaxy/ (no-wait)
+- name: Upload each collection tarball into pulp as collection_version
   ansible.builtin.command:
     argv:
-      - ansible-galaxy
-      - collection
-      - publish
-      - "{{ item }}"
-      - --server
-      - lab_hub_publish
-      - --ignore-certs
-      - --no-wait
-  environment:
-    ANSIBLE_CONFIG: "{{ _lab_galaxy_cfg }}"
+      - curl
+      - -sk
+      - -u
+      - "{{ aap_selfservice_custom_admin_username }}:{{ aap_selfservice_custom_admin_password }}"
+      - -X
+      - POST
+      - -H
+      - Accept: application/json
+      - -F
+      - "file=@{{ item }};type=application/octet-stream"
+      - -o
+      - "/tmp/portal-lab-cv-upload-{{ item | basename }}.json"
+      - -w
+      - "%{http_code}"
+      - "{{ _lab_hub_pulp }}/content/ansible/collection_versions/"
+  register: _lab_cv_upload
+  changed_when: true
+  no_log: true
   loop: "{{ _lab_collection_tarballs }}"
-  register: _lab_collection_publish
-  changed_when: >-
-    'already' not in (
-      (_lab_collection_publish.stdout | default('')) ~ ' ' ~
-      (_lab_collection_publish.stderr | default(''))
-    ) | lower
-  failed_when: false
   loop_control:
     label: "{{ item | basename }}"
 
-- name: Show ansible-galaxy publish results
-  ansible.builtin.debug:
-    msg: >-
-      {{ item.item | basename }}: rc={{ item.rc | default('?') }}
-      stdout={{ item.stdout | default('') | truncate(300) }}
-      stderr={{ item.stderr | default('') | truncate(300) }}
-  loop: "{{ _lab_collection_publish.results }}"
-  loop_control:
-    label: "{{ item.item | basename }}"
-
-- name: Fail with ansible-galaxy publish output when upload failed
+- name: Fail if pulp collection_version upload rejected
   ansible.builtin.fail:
     msg: >-
-      ansible-galaxy publish failed for {{ item.item | basename }}
-      (rc={{ item.rc | default('?') }}).
-      publish_url={{ _lab_galaxy_publish_url }}
-      stdout: {{ item.stdout | default('') }}
-      stderr: {{ item.stderr | default('') }}
-  when:
-    - (item.rc | default(0)) != 0
-    - ('already' not in ((item.stdout | default('')) ~ ' ' ~ (item.stderr | default(''))) | lower)
-  loop: "{{ _lab_collection_publish.results }}"
+      Pulp collection_version upload failed for {{ item.item | basename }}
+      HTTP={{ item.stdout | default('?') }}.
+      Body={{ lookup('file', '/tmp/portal-lab-cv-upload-' ~ (item.item | basename) ~ '.json', errors='ignore') | truncate(500) }}
+  when: (item.stdout | default('000') | trim) not in ['200', '201', '202']
+  loop: "{{ _lab_cv_upload.results }}"
   loop_control:
     label: "{{ item.item | basename }}"
 
-# Tarball name: <namespace>-<name>-<version>.tar.gz
-- name: Resolve collection namespace/name/version from each tarball name
+- name: Read pulp upload task hrefs
+  ansible.builtin.set_fact:
+    _lab_cv_tasks: "{{ _lab_cv_tasks | default([]) + [_task] }}"
+  vars:
+    _body: "{{ lookup('file', '/tmp/portal-lab-cv-upload-' ~ (item.item | basename) ~ '.json') | from_json }}"
+    _task:
+      tarball: "{{ item.item | basename }}"
+      task: "{{ _body.task | default('') }}"
+  loop: "{{ _lab_cv_upload.results }}"
+  loop_control:
+    label: "{{ item.item | basename }}"
+
+- name: Wait for pulp collection_version create tasks
+  ansible.builtin.uri:
+    url: >-
+      {{
+        item.task
+        if (item.task | regex_search('^https?://'))
+        else ((aap_selfservice_custom_controller_url | regex_replace('/$', '')) ~ item.task)
+      }}
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: 200
+  register: _lab_cv_task_poll
+  until: (_lab_cv_task_poll.json.state | default('')) in ['completed', 'failed', 'canceled']
+  retries: 36
+  delay: 5
+  loop: "{{ _lab_cv_tasks }}"
+  loop_control:
+    label: "{{ item.tarball }}"
+
+- name: Fail if any collection_version create task failed
+  ansible.builtin.fail:
+    msg: >-
+      Pulp failed creating collection_version for {{ item.item.tarball }}:
+      state={{ item.json.state | default('?') }}
+      error={{ item.json.error | default(item.json) | to_json | truncate(600) }}
+  when: (item.json.state | default('')) != 'completed'
+  loop: "{{ _lab_cv_task_poll.results }}"
+  loop_control:
+    label: "{{ item.item.tarball }}"
+
+- name: Collect created collection_version content hrefs
+  ansible.builtin.set_fact:
+    _lab_cv_hrefs: "{{ _lab_cv_hrefs | default([]) + [item.json.created_resources[0]] }}"
+  when:
+    - item.json.created_resources is defined
+    - (item.json.created_resources | length) > 0
+  loop: "{{ _lab_cv_task_poll.results }}"
+  loop_control:
+    label: "{{ item.item.tarball }}"
+
+- name: Require created collection_version hrefs
+  ansible.builtin.assert:
+    that:
+      - (_lab_cv_hrefs | default([]) | length) == (_lab_collection_tarballs | length)
+    fail_msg: >-
+      Expected {{ _lab_collection_tarballs | length }} collection_version hrefs,
+      got {{ _lab_cv_hrefs | default([]) | length }}.
+
+- name: Add collection versions to Hub published repository
+  ansible.builtin.uri:
+    url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}{{ _lab_published_repo_href }}modify/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body:
+      add_content_units: "{{ _lab_cv_hrefs }}"
+    status_code: [202, 200]
+  register: _lab_published_modify
+
+- name: Wait for published repository modify task
+  ansible.builtin.uri:
+    url: >-
+      {{
+        _lab_published_modify.json.task
+        if (_lab_published_modify.json.task | default('') | regex_search('^https?://'))
+        else (
+          (aap_selfservice_custom_controller_url | regex_replace('/$', ''))
+          ~ _lab_published_modify.json.task
+        )
+      }}
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: 200
+  register: _lab_published_modify_task
+  until: (_lab_published_modify_task.json.state | default('')) in ['completed', 'failed', 'canceled']
+  retries: 36
+  delay: 5
+  when: (_lab_published_modify.json.task | default('') | length) > 0
+
+- name: Fail if published modify task failed
+  ansible.builtin.fail:
+    msg: >-
+      Failed adding collections to published:
+      {{ _lab_published_modify_task.json.error | default(_lab_published_modify_task.json) | to_json | truncate(600) }}
+  when:
+    - _lab_published_modify_task is not skipped
+    - (_lab_published_modify_task.json.state | default('')) != 'completed'
+
+# Resolve coords for verify (tarball: ns-name-ver.tar.gz)
+- name: Resolve collection coords from tarball names
   ansible.builtin.set_fact:
     _lab_collection_coords: "{{ _lab_collection_coords | default([]) + [_coord] }}"
   vars:
@@ -208,131 +254,7 @@
   loop_control:
     label: "{{ item | basename }}"
 
-# Import lands in staging (approval required) or published (auto-approve).
-- name: Wait until each collection version appears in Hub staging
-  ansible.builtin.uri:
-    url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/staging/collections/index/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/"
-    method: GET
-    user: "{{ aap_selfservice_custom_admin_username }}"
-    password: "{{ aap_selfservice_custom_admin_password }}"
-    force_basic_auth: true
-    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    status_code: [200, 404]
-  register: _lab_staging_get
-  until: (_lab_staging_get.status | default(0)) == 200
-  retries: 24
-  delay: 5
-  loop: "{{ _lab_collection_coords }}"
-  failed_when: false
-  loop_control:
-    label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
-
-- name: Check published for collections not yet in staging
-  ansible.builtin.uri:
-    url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/published/collections/index/{{ item.item.namespace }}/{{ item.item.name }}/versions/{{ item.item.version }}/"
-    method: GET
-    user: "{{ aap_selfservice_custom_admin_username }}"
-    password: "{{ aap_selfservice_custom_admin_password }}"
-    force_basic_auth: true
-    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    status_code: [200, 404]
-  register: _lab_published_early
-  until: (_lab_published_early.status | default(0)) == 200
-  retries: 12
-  delay: 5
-  loop: "{{ _lab_staging_get.results }}"
-  when: (item.status | default(0)) != 200
-  failed_when: false
-  loop_control:
-    label: "{{ item.item.namespace }}.{{ item.item.name }}:{{ item.item.version }}"
-
-- name: Summarize where each collection version landed
-  ansible.builtin.set_fact:
-    _lab_land_summary: "{{ _lab_land_summary | default([]) + [_row] }}"
-  vars:
-    _coord: "{{ item }}"
-    _idx: "{{ ansible_loop.index0 }}"
-    _st: "{{ _lab_staging_get.results[_idx | int].status | default(0) | int }}"
-    _pub_matches: >-
-      {{
-        _lab_published_early.results | default([])
-        | selectattr('skipped', 'undefined')
-        | selectattr('item.item.namespace', 'defined')
-        | selectattr('item.item.namespace', 'equalto', _coord.namespace)
-        | selectattr('item.item.name', 'equalto', _coord.name)
-        | list
-      }}
-    _pub: >-
-      {{
-        (_pub_matches[0].status | default(0) | int)
-        if (_pub_matches | length) > 0 else 0
-      }}
-    _row:
-      namespace: "{{ _coord.namespace }}"
-      name: "{{ _coord.name }}"
-      version: "{{ _coord.version }}"
-      staging: "{{ _st }}"
-      published: "{{ _pub }}"
-      # Move only when in staging and not already published
-      needs_move: "{{ (_st == 200) and (_pub != 200) }}"
-      found: "{{ (_st == 200) or (_pub == 200) }}"
-  loop: "{{ _lab_collection_coords }}"
-  loop_control:
-    label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
-    extended: true
-
-- name: Show landing summary after import
-  ansible.builtin.debug:
-    var: _lab_land_summary
-
-- name: Fail early if a collection never appeared in staging or published
-  ansible.builtin.fail:
-    msg: >-
-      Collection {{ item.namespace }}.{{ item.name }}:{{ item.version }} did not
-      appear in Hub staging or published after ansible-galaxy publish.
-      staging_http={{ item.staging }} published_http={{ item.published }}.
-      publish_url={{ _lab_galaxy_publish_url }}.
-      "Pushed" with --no-wait only means upload accepted — check Hub Imports
-      on {{ aap_selfservice_custom_controller_url }}.
-  when: not (item.found | bool)
-  loop: "{{ _lab_land_summary }}"
-  loop_control:
-    label: "{{ item.namespace }}.{{ item.name }}"
-
-- name: Move lab collections from staging to published when needed
-  ansible.builtin.uri:
-    url: "{{ _lab_galaxy_api }}/v3/collections/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/move/staging/published/"
-    method: POST
-    user: "{{ aap_selfservice_custom_admin_username }}"
-    password: "{{ aap_selfservice_custom_admin_password }}"
-    force_basic_auth: true
-    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    status_code: [200, 201, 202, 204, 400, 404]
-    return_content: true
-  loop: "{{ _lab_land_summary }}"
-  when: item.needs_move | bool
-  register: _lab_collection_move
-  failed_when: false
-  loop_control:
-    label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
-
-- name: Show move results
-  ansible.builtin.debug:
-    msg: >-
-      {{ item.item.namespace }}.{{ item.item.name }}:{{ item.item.version }}
-      staging → published: HTTP={{ item.status | default('skipped') }}
-      body={{ item.content | default('') | truncate(200) }}
-  loop: "{{ _lab_collection_move.results | default([]) }}"
-  when: item is not skipped
-  loop_control:
-    label: "{{ item.item.namespace }}.{{ item.item.name }}"
-
-- name: Wait briefly for Hub move tasks
-  ansible.builtin.pause:
-    seconds: 15
-    prompt: "Waiting for Hub to finish moving Northwind collections to published..."
-
-- name: Verify each lab collection is visible in Hub published
+- name: Verify each lab collection is in Hub published
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/published/collections/index/{{ item.namespace }}/{{ item.name }}/"
     method: GET
@@ -343,35 +265,15 @@
     status_code: [200, 404]
   register: _lab_published_get
   until: (_lab_published_get.status | default(0)) == 200
-  retries: 36
+  retries: 24
   delay: 5
   loop: "{{ _lab_collection_coords }}"
-  failed_when: false
   loop_control:
     label: "{{ item.namespace }}.{{ item.name }}"
-
-- name: Fail if any Northwind collection is missing from Hub published
-  ansible.builtin.assert:
-    that:
-      - (_lab_published_get.results | map(attribute='status') | list | min) == 200
-    fail_msg: >-
-      Hub `published` still missing collections after import/move.
-      land_summary={{ _lab_land_summary }}.
-      published_http={{ _lab_published_get.results | map(attribute='status') | list }}.
-      publish_url={{ _lab_galaxy_publish_url }}.
-      Check Hub UI Imports/Approval on {{ aap_selfservice_custom_controller_url }}.
-
-- name: Remove temporary galaxy server config
-  ansible.builtin.file:
-    path: "{{ _lab_galaxy_cfg }}"
-    state: absent
-  no_log: true
 
 - name: Report lab collections publish status
   ansible.builtin.debug:
     msg: >-
-      Published {{ portal_lab_collections | length }} Northwind collection(s)
-      to {{ aap_selfservice_custom_controller_url }} Hub published
-      via {{ _lab_galaxy_publish_url }}
-      (namespace={{ portal_lab_collection_namespace }}).
+      Added {{ portal_lab_collections | length }} Northwind collection(s) to Hub
+      published on {{ aap_selfservice_custom_controller_url }}.
       Portal Collections → Sync Now should list northwind.*.

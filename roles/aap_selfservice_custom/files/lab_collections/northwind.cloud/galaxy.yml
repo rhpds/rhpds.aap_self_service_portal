@@ -9,7 +9,7 @@ description: >
   idle-resource hygiene checks, and playbooks used by the Cloud self-service
   catalog in Ansible Automation Platform.
 license_file: LICENSE
-tags: [northwind, cloud, aws, azure, tagging]
+tags: [cloud, infrastructure, tools]
 dependencies: {}
 repository: https://github.com/AAP-Automation-Portal-Lab/aap_lab.observability
 documentation: https://github.com/AAP-Automation-Portal-Lab/aap_lab.observability/blob/main/README.md

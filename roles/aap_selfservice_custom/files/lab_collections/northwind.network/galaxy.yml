@@ -9,7 +9,7 @@ description: >
   circuit health checks, and playbooks backing the Network catalog in the
   Self-Service Automation Portal.
 license_file: LICENSE
-tags: [northwind, network, backup, infrastructure]
+tags: [networking, infrastructure, tools]
 dependencies: {}
 repository: https://github.com/AAP-Automation-Portal-Lab/aap_lab.inventory
 documentation: https://github.com/AAP-Automation-Portal-Lab/aap_lab.inventory/blob/main/README.md
