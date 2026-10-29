@@ -3,11 +3,10 @@
 # Publish bundled Northwind collections into this instance's Hub `published`
 # repo so the portal Collections tab can sync them (pahCollections).
 #
-# Publish into per-namespace inbound:
-#   {gateway}/api/galaxy/content/inbound-{namespace}/
-# AAP often leaves inbound missing after namespace create, so this task file
-# creates the pulp ansible repository + distribution explicitly (Basic auth),
-# then publishes with admin username/password via ansible-galaxy.
+# Documented galaxy-ng upload path (not handmade inbound repos):
+#   ansible-galaxy publish → {gateway}/api/galaxy/
+# with admin username/password. That runs the import pipeline into `staging`
+# (or straight to `published` if auto-approve). We then move staging → published.
 #
 # Expects:
 #   aap_selfservice_custom_controller_url / _admin_username / _admin_password
@@ -18,7 +17,7 @@
     _lab_collections_src: "{{ role_path }}/files/lab_collections"
     _lab_collections_build: /tmp/portal-lab-collections-build-{{ guid | default('lab') }}
     _lab_galaxy_api: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy"
-    _lab_galaxy_inbound: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy/content/inbound-{{ portal_lab_collection_namespace }}/"
+    _lab_galaxy_publish_url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy/"
     _lab_galaxy_cfg: /tmp/portal-lab-galaxy-{{ guid | default('lab') }}.cfg
 
 - name: Ensure lab collections build directory
@@ -60,14 +59,7 @@
           Expected {{ portal_lab_collections | length }} collection tarballs in
           {{ _lab_collections_build }}, found {{ _lab_collection_tarballs | length }}.
 
-# Hub pulp APIs want Basic auth (same pattern as configure_hub_remotes.yml).
-# Gateway Bearer often creates a namespace record without an inbound distribution;
-# root /api/galaxy/ publish then "succeeds" with --no-wait but never lands in staging.
-- name: Set Hub pulp API base and inbound names
-  ansible.builtin.set_fact:
-    _lab_hub_pulp: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy/pulp/api/v3"
-    _lab_inbound_name: "inbound-{{ portal_lab_collection_namespace }}"
-
+# Namespace must exist before upload. Use Basic auth (same as Hub remotes).
 - name: Create Hub namespace via UI API (basic auth)
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/_ui/v1/namespaces/"
@@ -136,134 +128,7 @@
       ) | int
     ) < 1
 
-- name: Look up inbound ansible repository
-  ansible.builtin.uri:
-    url: "{{ _lab_hub_pulp }}/repositories/ansible/ansible/?name={{ _lab_inbound_name | urlencode }}"
-    method: GET
-    user: "{{ aap_selfservice_custom_admin_username }}"
-    password: "{{ aap_selfservice_custom_admin_password }}"
-    force_basic_auth: true
-    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    status_code: 200
-  register: _lab_inbound_repo_list
-
-- name: Create inbound ansible repository when missing
-  ansible.builtin.uri:
-    url: "{{ _lab_hub_pulp }}/repositories/ansible/ansible/"
-    method: POST
-    user: "{{ aap_selfservice_custom_admin_username }}"
-    password: "{{ aap_selfservice_custom_admin_password }}"
-    force_basic_auth: true
-    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    body_format: json
-    body:
-      name: "{{ _lab_inbound_name }}"
-      description: "Inbound uploads for {{ portal_lab_collection_namespace }}"
-      retain_repo_versions: 1
-      pulp_labels:
-        pipeline: staging
-    status_code: [201, 202]
-    return_content: true
-  register: _lab_inbound_repo_create
-  when: (_lab_inbound_repo_list.json.results | default([]) | length) == 0
-
-- name: Set inbound repository pulp_href
-  ansible.builtin.set_fact:
-    _lab_inbound_repo_href: >-
-      {{
-        _lab_inbound_repo_create.json.pulp_href
-        if (_lab_inbound_repo_create is defined and not (_lab_inbound_repo_create.skipped | default(false))
-            and (_lab_inbound_repo_create.json.pulp_href | default('')))
-        else (_lab_inbound_repo_list.json.results[0].pulp_href | default(''))
-      }}
-
-- name: Look up inbound ansible distribution
-  ansible.builtin.uri:
-    url: "{{ _lab_hub_pulp }}/distributions/ansible/ansible/?name={{ _lab_inbound_name | urlencode }}"
-    method: GET
-    user: "{{ aap_selfservice_custom_admin_username }}"
-    password: "{{ aap_selfservice_custom_admin_password }}"
-    force_basic_auth: true
-    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    status_code: 200
-  register: _lab_inbound_dist_list
-
-- name: Create inbound ansible distribution when missing
-  ansible.builtin.uri:
-    url: "{{ _lab_hub_pulp }}/distributions/ansible/ansible/"
-    method: POST
-    user: "{{ aap_selfservice_custom_admin_username }}"
-    password: "{{ aap_selfservice_custom_admin_password }}"
-    force_basic_auth: true
-    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    body_format: json
-    body:
-      name: "{{ _lab_inbound_name }}"
-      base_path: "{{ _lab_inbound_name }}"
-      repository: "{{ _lab_inbound_repo_href }}"
-    status_code: [201, 202]
-    return_content: true
-  register: _lab_inbound_dist_create
-  when:
-    - (_lab_inbound_repo_href | length) > 0
-    - (_lab_inbound_dist_list.json.results | default([]) | length) == 0
-
-- name: Wait for inbound distribution create task when async
-  when:
-    - _lab_inbound_dist_create is defined
-    - not (_lab_inbound_dist_create.skipped | default(false))
-    - (_lab_inbound_dist_create.json.task | default('') | length) > 0
-  ansible.builtin.uri:
-    url: >-
-      {{
-        _lab_inbound_dist_create.json.task
-        if (_lab_inbound_dist_create.json.task | regex_search('^https?://'))
-        else (
-          (aap_selfservice_custom_controller_url | regex_replace('/$', ''))
-          ~ _lab_inbound_dist_create.json.task
-        )
-      }}
-    method: GET
-    user: "{{ aap_selfservice_custom_admin_username }}"
-    password: "{{ aap_selfservice_custom_admin_password }}"
-    force_basic_auth: true
-    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    status_code: 200
-  register: _lab_inbound_dist_task
-  until: (_lab_inbound_dist_task.json.state | default('')) in ['completed', 'failed', 'canceled']
-  retries: 30
-  delay: 2
-
-- name: Wait for inbound distribution to become available
-  ansible.builtin.uri:
-    url: "{{ _lab_galaxy_inbound }}"
-    method: GET
-    user: "{{ aap_selfservice_custom_admin_username }}"
-    password: "{{ aap_selfservice_custom_admin_password }}"
-    force_basic_auth: true
-    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
-    status_code: [200, 401, 403, 404]
-  register: _lab_inbound_probe
-  until: (_lab_inbound_probe.status | default(0)) in [200, 401, 403]
-  retries: 18
-  delay: 5
-  failed_when: false
-
-- name: Fail if inbound distribution is still missing
-  ansible.builtin.fail:
-    msg: >-
-      Hub inbound distribution missing after pulp create:
-      {{ _lab_galaxy_inbound }} HTTP={{ _lab_inbound_probe.status | default('n/a') }}.
-      repo_href={{ _lab_inbound_repo_href | default('n/a') }}.
-      dist_create={{ _lab_inbound_dist_create.status | default('skipped') }}.
-  when: (_lab_inbound_probe.status | default(0)) not in [200, 401, 403]
-
-- name: Set galaxy publish URL to inbound
-  ansible.builtin.set_fact:
-    _lab_galaxy_publish_url: "{{ _lab_galaxy_inbound }}"
-    _lab_galaxy_publish_mode: inbound
-
-# Prefer admin basic auth for ansible-galaxy (works with Hub pulp/galaxy).
+# Prefer admin basic auth for ansible-galaxy (Hub pulp/galaxy).
 # --no-wait: CLI import polling often fails on self-signed gateway TLS; we poll Hub APIs.
 - name: Write temporary galaxy server config for publish
   ansible.builtin.copy:
@@ -274,12 +139,12 @@
       server_list = lab_hub_publish
 
       [galaxy_server.lab_hub_publish]
-      url = {{ _lab_galaxy_publish_url | trim }}
+      url = {{ _lab_galaxy_publish_url }}
       username = {{ aap_selfservice_custom_admin_username }}
       password = {{ aap_selfservice_custom_admin_password }}
   no_log: true
 
-- name: Publish each lab collection tarball to Hub inbound (no-wait)
+- name: Publish each lab collection tarball to Hub /api/galaxy/ (no-wait)
   ansible.builtin.command:
     argv:
       - ansible-galaxy
@@ -318,9 +183,7 @@
     msg: >-
       ansible-galaxy publish failed for {{ item.item | basename }}
       (rc={{ item.rc | default('?') }}).
-      mode={{ _lab_galaxy_publish_mode }}
-      publish_url={{ _lab_galaxy_publish_url | trim }}
-      inbound_probe={{ _lab_inbound_probe.status | default('n/a') }}
+      publish_url={{ _lab_galaxy_publish_url }}
       stdout: {{ item.stdout | default('') }}
       stderr: {{ item.stderr | default('') }}
   when:
@@ -329,6 +192,7 @@
   loop: "{{ _lab_collection_publish.results }}"
   loop_control:
     label: "{{ item.item | basename }}"
+
 # Tarball name: <namespace>-<name>-<version>.tar.gz
 - name: Resolve collection namespace/name/version from each tarball name
   ansible.builtin.set_fact:
@@ -344,6 +208,7 @@
   loop_control:
     label: "{{ item | basename }}"
 
+# Import lands in staging (approval required) or published (auto-approve).
 - name: Wait until each collection version appears in Hub staging
   ansible.builtin.uri:
     url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/staging/collections/index/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/"
@@ -355,31 +220,88 @@
     status_code: [200, 404]
   register: _lab_staging_get
   until: (_lab_staging_get.status | default(0)) == 200
-  retries: 36
+  retries: 24
   delay: 5
   loop: "{{ _lab_collection_coords }}"
   failed_when: false
   loop_control:
     label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
 
-- name: Check whether collections already landed in published
+- name: Check published for collections not yet in staging
   ansible.builtin.uri:
-    url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/published/collections/index/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/"
+    url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/published/collections/index/{{ item.item.namespace }}/{{ item.item.name }}/versions/{{ item.item.version }}/"
     method: GET
     user: "{{ aap_selfservice_custom_admin_username }}"
     password: "{{ aap_selfservice_custom_admin_password }}"
     force_basic_auth: true
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     status_code: [200, 404]
-  register: _lab_published_version_get
-  loop: "{{ _lab_collection_coords }}"
+  register: _lab_published_early
+  until: (_lab_published_early.status | default(0)) == 200
+  retries: 12
+  delay: 5
+  loop: "{{ _lab_staging_get.results }}"
+  when: (item.status | default(0)) != 200
   failed_when: false
   loop_control:
+    label: "{{ item.item.namespace }}.{{ item.item.name }}:{{ item.item.version }}"
+
+- name: Summarize where each collection version landed
+  ansible.builtin.set_fact:
+    _lab_land_summary: "{{ _lab_land_summary | default([]) + [_row] }}"
+  vars:
+    _coord: "{{ item }}"
+    _idx: "{{ ansible_loop.index0 }}"
+    _st: "{{ _lab_staging_get.results[_idx | int].status | default(0) | int }}"
+    _pub_matches: >-
+      {{
+        _lab_published_early.results | default([])
+        | selectattr('skipped', 'undefined')
+        | selectattr('item.item.namespace', 'defined')
+        | selectattr('item.item.namespace', 'equalto', _coord.namespace)
+        | selectattr('item.item.name', 'equalto', _coord.name)
+        | list
+      }}
+    _pub: >-
+      {{
+        (_pub_matches[0].status | default(0) | int)
+        if (_pub_matches | length) > 0 else 0
+      }}
+    _row:
+      namespace: "{{ _coord.namespace }}"
+      name: "{{ _coord.name }}"
+      version: "{{ _coord.version }}"
+      staging: "{{ _st }}"
+      published: "{{ _pub }}"
+      # Move only when in staging and not already published
+      needs_move: "{{ (_st == 200) and (_pub != 200) }}"
+      found: "{{ (_st == 200) or (_pub == 200) }}"
+  loop: "{{ _lab_collection_coords }}"
+  loop_control:
     label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
+    extended: true
+
+- name: Show landing summary after import
+  ansible.builtin.debug:
+    var: _lab_land_summary
+
+- name: Fail early if a collection never appeared in staging or published
+  ansible.builtin.fail:
+    msg: >-
+      Collection {{ item.namespace }}.{{ item.name }}:{{ item.version }} did not
+      appear in Hub staging or published after ansible-galaxy publish.
+      staging_http={{ item.staging }} published_http={{ item.published }}.
+      publish_url={{ _lab_galaxy_publish_url }}.
+      "Pushed" with --no-wait only means upload accepted — check Hub Imports
+      on {{ aap_selfservice_custom_controller_url }}.
+  when: not (item.found | bool)
+  loop: "{{ _lab_land_summary }}"
+  loop_control:
+    label: "{{ item.namespace }}.{{ item.name }}"
 
 - name: Move lab collections from staging to published when needed
   ansible.builtin.uri:
-    url: "{{ _lab_galaxy_api }}/v3/collections/{{ item.item.namespace }}/{{ item.item.name }}/versions/{{ item.item.version }}/move/staging/published/"
+    url: "{{ _lab_galaxy_api }}/v3/collections/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/move/staging/published/"
     method: POST
     user: "{{ aap_selfservice_custom_admin_username }}"
     password: "{{ aap_selfservice_custom_admin_password }}"
@@ -387,20 +309,28 @@
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
     status_code: [200, 201, 202, 204, 400, 404]
     return_content: true
-  loop: "{{ _lab_published_version_get.results }}"
-  when:
-    - (item.status | default(0)) != 200
-    - (_lab_staging_get.results[ansible_loop.index0].status | default(0)) == 200
+  loop: "{{ _lab_land_summary }}"
+  when: item.needs_move | bool
   register: _lab_collection_move
   failed_when: false
   loop_control:
-    label: "{{ item.item.namespace }}.{{ item.item.name }}:{{ item.item.version }}"
-    extended: true
+    label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
 
-- name: Wait briefly for Hub move/import tasks
+- name: Show move results
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item.namespace }}.{{ item.item.name }}:{{ item.item.version }}
+      staging → published: HTTP={{ item.status | default('skipped') }}
+      body={{ item.content | default('') | truncate(200) }}
+  loop: "{{ _lab_collection_move.results | default([]) }}"
+  when: item is not skipped
+  loop_control:
+    label: "{{ item.item.namespace }}.{{ item.item.name }}"
+
+- name: Wait briefly for Hub move tasks
   ansible.builtin.pause:
-    seconds: 20
-    prompt: "Waiting for Hub to finish publishing Northwind collections..."
+    seconds: 15
+    prompt: "Waiting for Hub to finish moving Northwind collections to published..."
 
 - name: Verify each lab collection is visible in Hub published
   ansible.builtin.uri:
@@ -425,10 +355,10 @@
     that:
       - (_lab_published_get.results | map(attribute='status') | list | min) == 200
     fail_msg: >-
-      Hub `published` is missing one or more Northwind collections after publish/move.
-      Staging HTTP statuses={{ _lab_staging_get.results | map(attribute='status') | list }}.
-      publish_mode={{ _lab_galaxy_publish_mode }}
-      publish_url={{ _lab_galaxy_publish_url | trim }}.
+      Hub `published` still missing collections after import/move.
+      land_summary={{ _lab_land_summary }}.
+      published_http={{ _lab_published_get.results | map(attribute='status') | list }}.
+      publish_url={{ _lab_galaxy_publish_url }}.
       Check Hub UI Imports/Approval on {{ aap_selfservice_custom_controller_url }}.
 
 - name: Remove temporary galaxy server config
@@ -442,7 +372,6 @@
     msg: >-
       Published {{ portal_lab_collections | length }} Northwind collection(s)
       to {{ aap_selfservice_custom_controller_url }} Hub published
-      via {{ _lab_galaxy_publish_url | trim }}
-      (mode={{ _lab_galaxy_publish_mode }},
-      namespace={{ portal_lab_collection_namespace }}).
+      via {{ _lab_galaxy_publish_url }}
+      (namespace={{ portal_lab_collection_namespace }}).
       Portal Collections → Sync Now should list northwind.*.
