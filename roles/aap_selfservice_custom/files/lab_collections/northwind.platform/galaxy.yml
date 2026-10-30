@@ -1,9 +1,9 @@
 namespace: northwind
 name: platform
-version: 1.2.0
+version: 1.2.1
 readme: README.md
 authors:
-  - Northwind Platform Engineering <platform-automation@northwind.example>
+  - Northwind Platform <platform@northwind.example>
 description: >
   Shared platform automation for Northwind Corporation — host baseline,
   change-window guards, and standard operating playbooks used by Controller
