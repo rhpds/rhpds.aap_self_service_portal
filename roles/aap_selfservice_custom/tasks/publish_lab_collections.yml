@@ -94,6 +94,8 @@
   ansible.builtin.set_fact:
     _lab_published_repo_href: "{{ _lab_published_repo.json.results[0].pulp_href }}"
 
+# NOTE: list item `Accept: application/json` (unquoted) is parsed as a YAML
+# mapping and becomes "{'Accept': 'application/json'}" → gateway HTML 400.
 - name: Upload each collection tarball into pulp as collection_version
   ansible.builtin.command:
     argv:
@@ -104,7 +106,7 @@
       - -X
       - POST
       - -H
-      - Accept: application/json
+      - "Accept: application/json"
       - -F
       - "file=@{{ item }};type=application/octet-stream"
       - -o
@@ -122,14 +124,25 @@
 - name: Fail if pulp collection_version upload rejected
   ansible.builtin.fail:
     msg: >-
-      Pulp collection_version upload failed for {{ item.item | basename }}
-      HTTP={{ item.stdout | default('?') }}.
-      Body={{ lookup('file', '/tmp/portal-lab-cv-upload-' ~ (item.item | basename) ~ '.json', errors='ignore') | truncate(500) }}
-  when: (item.stdout | default('000') | trim) not in ['200', '201', '202']
-  loop: "{{ _lab_cv_upload.results }}"
+      Pulp collection_version upload failed for {{ item | basename }}
+      HTTP={{ _code }}.
+      Body={{ _body | truncate(500) }}
+  vars:
+    _code: >-
+      {{
+        (_lab_cv_upload.results
+         | selectattr('item', 'equalto', item)
+         | map(attribute='stdout')
+         | list
+         | first
+         | default('?')
+         | trim)
+      }}
+    _body: "{{ lookup('file', '/tmp/portal-lab-cv-upload-' ~ (item | basename) ~ '.json', errors='ignore') }}"
+  when: _code not in ['200', '201', '202']
+  loop: "{{ _lab_collection_tarballs }}"
   loop_control:
-    label: "{{ item.item | basename }}"
-
+    label: "{{ item | basename }}"
 - name: Read pulp upload task hrefs
   ansible.builtin.set_fact:
     _lab_cv_tasks: "{{ _lab_cv_tasks | default([]) + [_task] }}"
