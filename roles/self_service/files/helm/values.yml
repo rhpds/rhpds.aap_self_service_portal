@@ -392,8 +392,6 @@ redhat-developer-hub:
               - catalog
               - scaffolder
               - permission
-              # Expose ansible.* navigation permissions (templates/history/EE/collections/git) in RBAC UI
-              - ansible
       extraContainers:
         - command:
             - adt
