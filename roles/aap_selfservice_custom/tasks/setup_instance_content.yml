@@ -77,9 +77,6 @@
 - name: Create demo inventories
   ansible.builtin.include_tasks: setup_inventories.yml
 
-- name: Create inventory hosts (localhost for API-only JTs)
-  ansible.builtin.include_tasks: setup_hosts.yml
-
 - name: Create demo credentials
   ansible.builtin.include_tasks: setup_credentials.yml
 

@@ -64,10 +64,6 @@ aap_selfservice_custom_inventories:
   - name: Network Inventory
     organization: Default
 
-  # Localhost for API-only JTs (GitHub join, etc.)
-  - name: Localhost Inventory
-    organization: Default
-
 # -------------------------------------------------------------------
 # Demo Credentials Configuration
 # -------------------------------------------------------------------
@@ -573,13 +569,13 @@ aap_selfservice_custom_job_templates:
     ask_variables_on_launch: true
 
   # EE Builder — invite student GitHub user into lab team (push on EE repo only)
-  - name: GitHub/Join lab team
+  - name: GitHub Join Lab Team
     description: >-
       Add your GitHub username to the lab team with write access on your
       pre-created EE repo (PR + Actions dispatch). Accept the org invite email if prompted.
     job_type: run
     organization: Default
-    inventory: Localhost Inventory
+    inventory: Demo Inventory
     project: SelfService Demo playbooks
     playbook: join_github_org.yml
     credentials:

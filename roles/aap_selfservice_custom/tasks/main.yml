@@ -11,6 +11,10 @@
 # AgnosticD ACTION:
 #   create/provision (default) — demo content + EE GitHub repos
 #   destroy/stop — delete EE GitHub repos ({{ guid }}-*-ee) and team lab-{{ guid }}
+#
+# Catalog (e.g. aap-multiinstance-workshop/dev.yaml): mark this workload
+# no_k8s_api: true so openshift_workload_destroyer still invokes us when the
+# cluster is UNREACHABLE. Cleanup talks only to api.github.com — not OCP/AAP.
 
 - name: Display role banner
   ansible.builtin.debug:
@@ -24,7 +28,7 @@
            else 'configure AAP demo content' }})
 
 # -------------------------------------------------------------------
-# Destroy / stop — GitHub EE cleanup (repos + team)
+# Destroy / stop — GitHub EE cleanup (repos + team); cluster-independent
 # -------------------------------------------------------------------
 - name: Deprovision EE Builder GitHub repos and lab team
   when:
