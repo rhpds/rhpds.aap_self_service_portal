@@ -136,7 +136,9 @@ redhat-developer-hub:
                       sidebarBackgroundColor: "#000000"
                       sidebarDividerColor: "#333333"
                       sidebarItemSelectedBackgroundColor: "#1a1a1a"
-                      appBarBackgroundColor: "#ffffff"
+                      # Match PatternFly/RHDH page background (#f0f0f0), not pure white,
+                      # so the app bar does not sit as a bright strip above the content.
+                      appBarBackgroundColor: "#f0f0f0"
                       appBarBackgroundScheme: light
                       appBarForegroundColor: "#151515"
             fullLogo: >-
