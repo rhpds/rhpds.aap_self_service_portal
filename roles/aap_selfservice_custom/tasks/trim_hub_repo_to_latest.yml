@@ -18,6 +18,23 @@
 - name: "Set keep_versions for {{ hub_remote.name }}"
   ansible.builtin.set_fact:
     _hub_keep_versions: "{{ hub_remote.keep_versions | default(3) | int }}"
+    _hub_pin_error_file: "/tmp/trim_hub_versions_{{ hub_remote.name }}.err"
+
+# requirements_collections may be bare strings ("community.general") or
+# maps ({name: ...}). Flatten to a CSV allow-list so the trim script
+# queries per collection instead of paging the whole remote (which 502s
+# on heavy remotes like community / community.general).
+- name: "Build collection allow-list CSV for {{ hub_remote.name }}"
+  ansible.builtin.set_fact:
+    _hub_pin_collections_csv: >-
+      {% for c in hub_remote.requirements_collections | default([]) -%}
+      {{ c.name if c is mapping else c }}{{ ',' if not loop.last else '' }}
+      {%- endfor %}
+
+- name: "Clear prior pin-build error file for {{ hub_remote.name }}"
+  ansible.builtin.file:
+    path: "{{ _hub_pin_error_file }}"
+    state: absent
 
 - name: "Build pinned requirements (newest {{ _hub_keep_versions }} per collection) for {{ hub_remote.name }}"
   ansible.builtin.command:
@@ -31,9 +48,31 @@
     HUB_REPO: "{{ hub_remote.name }}"
     KEEP_VERSIONS: "{{ _hub_keep_versions }}"
     VERIFY_SSL: "{{ aap_selfservice_custom_verify_ssl | bool | lower }}"
+    COLLECTIONS: "{{ _hub_pin_collections_csv }}"
+    ERROR_FILE: "{{ _hub_pin_error_file }}"
   register: _hub_pin_build
   changed_when: false
+  failed_when: false
   no_log: true
+
+- name: "Read pin build error for {{ hub_remote.name }}"
+  when: (_hub_pin_build.rc | default(1) | int) != 0
+  ansible.builtin.slurp:
+    src: "{{ _hub_pin_error_file }}"
+  register: _hub_pin_error_slurp
+  failed_when: false
+
+- name: "Fail pin build for {{ hub_remote.name }}"
+  when: (_hub_pin_build.rc | default(1) | int) != 0
+  ansible.builtin.fail:
+    msg: >-
+      trim_hub_versions.py failed for {{ hub_remote.name }}
+      (rc={{ _hub_pin_build.rc | default('?') }}):
+      {{
+        (_hub_pin_error_slurp.content | b64decode | trim)
+        if (_hub_pin_error_slurp.content is defined)
+        else 'see runner logs; community remotes often 502 when listing all versions'
+      }}
 
 - name: "Parse pin build result for {{ hub_remote.name }}"
   ansible.builtin.set_fact:
