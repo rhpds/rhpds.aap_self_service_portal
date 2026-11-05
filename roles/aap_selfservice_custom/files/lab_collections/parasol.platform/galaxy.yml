@@ -1,0 +1,17 @@
+namespace: parasol
+name: platform
+version: 1.2.1
+readme: README.md
+authors:
+  - Parasol Platform <platform@parasol.example>
+description: >
+  Shared platform automation for Parasol Insurance, host baseline,
+  change-window guards, and standard operating playbooks used by Controller
+  and the Self-Service Automation Portal.
+license_file: LICENSE
+tags: [infrastructure, linux, tools]
+dependencies: {}
+repository: https://github.com/AAP-Automation-Portal-Lab/aap_lab.platform
+documentation: https://github.com/AAP-Automation-Portal-Lab/aap_lab.platform/blob/main/README.md
+homepage: https://parasol.example
+issues: https://github.com/AAP-Automation-Portal-Lab/aap_lab.platform/issues

@@ -1,6 +1,6 @@
 ---
 # SPDX-License-Identifier: MIT-0
-# Publish Northwind lab collections into Hub `published` for pahCollections.
+# Publish Parasol lab collections into Hub `published` for pahCollections.
 #
 # Flow (kept intentionally simple):
 #   1) build tarballs once per provision host
@@ -38,7 +38,7 @@
 - name: Build collection tarballs once per provision host
   when: _lab_collection_tarballs is not defined
   block:
-    - name: Build each Northwind collection
+    - name: Build each Parasol collection
       ansible.builtin.command:
         argv:
           - ansible-galaxy
@@ -220,7 +220,7 @@
 - name: Wait briefly for Hub move tasks
   ansible.builtin.pause:
     seconds: 10
-    prompt: "Waiting for Hub to finish moving Northwind collections..."
+    prompt: "Waiting for Hub to finish moving Parasol collections..."
 
 - name: Verify each lab collection is in Hub published
   ansible.builtin.uri:
@@ -240,12 +240,12 @@
   loop_control:
     label: "{{ item.namespace }}.{{ item.name }}"
 
-- name: Fail if any Northwind collection is missing from Hub published
+- name: Fail if any Parasol collection is missing from Hub published
   ansible.builtin.assert:
     that:
       - (_lab_published_get.results | map(attribute='status') | list | min) == 200
     fail_msg: >-
-      Hub published missing Northwind collections after publish/move.
+      Hub published missing Parasol collections after publish/move.
       staging={{ _lab_staging_get.results | map(attribute='status') | list }}
       published={{ _lab_published_get.results | map(attribute='status') | list }}
       url={{ aap_selfservice_custom_controller_url }}
@@ -260,6 +260,6 @@
 - name: Report lab collections publish status
   ansible.builtin.debug:
     msg: >-
-      Published {{ portal_lab_collections | length }} Northwind collection(s)
+      Published {{ portal_lab_collections | length }} Parasol collection(s)
       to {{ aap_selfservice_custom_controller_url }} Hub published.
-      Portal Collections → Sync Now should list northwind.*.
+      Portal Collections → Sync Now should list parasol.*.

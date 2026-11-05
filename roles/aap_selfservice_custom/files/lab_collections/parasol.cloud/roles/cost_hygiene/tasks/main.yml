@@ -1,0 +1,28 @@
+---
+- name: Discover EC2 instances in the region
+  amazon.aws.ec2_instance_info:
+    region: "{{ parasol_cloud_region }}"
+  register: _nw_ec2
+
+- name: Reset findings list
+  ansible.builtin.set_fact:
+    parasol_untagged_instances: []
+
+- name: Identify instances missing required tags
+  ansible.builtin.set_fact:
+    parasol_untagged_instances: "{{ parasol_untagged_instances + [inst.instance_id] }}"
+  loop: "{{ _nw_ec2.instances }}"
+  loop_control:
+    loop_var: inst
+    label: "{{ inst.instance_id }}"
+  when: >
+    parasol_required_tag_keys
+    | difference((inst.tags | default({})).keys() | list)
+    | length > 0
+
+- name: Report FinOps hygiene findings
+  ansible.builtin.debug:
+    msg: >-
+      {{ parasol_untagged_instances | length }} instance(s) missing
+      required Parasol tags {{ parasol_required_tag_keys }}:
+      {{ parasol_untagged_instances }}

@@ -1,0 +1,6 @@
+---
+parasol_required_tag_keys:
+  - parasol:owner
+  - nw:cost-center
+  - nw:environment
+parasol_cloud_region: us-east-1

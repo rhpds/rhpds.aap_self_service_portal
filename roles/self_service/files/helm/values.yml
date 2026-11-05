@@ -87,7 +87,7 @@ redhat-developer-hub:
           integrity: 'sha512-6oFAsgBclqDOFWrWZZV7XsYT5gwXZIPopQwmrUaPSWtvCeDhqAQ7r19FTw44ecT+GJt/I0YANVorf8ylGF0Amw=='
           package: 'http://plugin-registry:8080/ansible-backstage-plugin-auth-backend-module-rhaap-provider-dynamic-2.2.7.tgz'
           pluginConfig: {}
-        # Required for EE Builder "Log in with GitHub" (USER_OAUTH_TOKEN) — chart default we had dropped
+        # Required for EE Builder "Log in with GitHub" (USER_OAUTH_TOKEN), chart default we had dropped
         - disabled: false
           package: '{{- include "plugins.load.github-auth-provider" . }}'
         - disabled: false
@@ -147,7 +147,7 @@ redhat-developer-hub:
           environment: production
           omitIdentityTokenOwnershipClaim: true
           providers:
-            # Secondary auth for EE Builder scaffolder (USER_OAUTH_TOKEN) — not the sign-in page.
+            # Secondary auth for EE Builder scaffolder (USER_OAUTH_TOKEN), not the sign-in page.
             # Default scope is only read:user; repo+workflow needed to open PRs and
             # dispatch ee-build.yml (GitHub returns 404 Not Found without them).
             # Multi-instance: helm_values.yml sets callbackUrl from
@@ -233,7 +233,7 @@ redhat-developer-hub:
                             minutes: 60
                           timeout:
                             minutes: 30
-                      # Lab publishes northwind.* here; sync often so Collections isn't empty for long
+                      # Lab publishes parasol.* here; sync often so Collections isn't empty for long
                       - name: published
                         schedule:
                           frequency:

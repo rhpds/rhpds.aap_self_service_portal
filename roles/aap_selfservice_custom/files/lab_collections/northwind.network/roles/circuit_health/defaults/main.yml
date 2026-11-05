@@ -1,4 +1,0 @@
----
-northwind_network_critical_interfaces:
-  - GigabitEthernet0/0
-  - GigabitEthernet0/1

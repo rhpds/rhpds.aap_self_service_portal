@@ -1,3 +1,0 @@
----
-northwind_network_backup_root: /var/tmp/northwind-network-backups
-northwind_network_backup_retain_days: 30

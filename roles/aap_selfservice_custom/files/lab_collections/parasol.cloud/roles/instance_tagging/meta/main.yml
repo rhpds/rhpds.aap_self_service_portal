@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: instance_tagging
+  author: Parasol Cloud Operations
+  description: Apply Parasol mandatory cloud resource tags
+  license: MIT
+  min_ansible_version: "2.14"
+dependencies: []

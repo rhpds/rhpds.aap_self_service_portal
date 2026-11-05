@@ -1,0 +1,7 @@
+---
+- name: Weekly Parasol cloud cost-hygiene scan
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - role: parasol.cloud.cost_hygiene
