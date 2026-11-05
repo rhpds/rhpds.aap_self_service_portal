@@ -731,13 +731,12 @@ portal_lab_collections:
 # -------------------------------------------------------------------
 # configure_hub_remotes.yml PATCHes pulp remotes + kicks repository sync.
 aap_selfservice_custom_configure_hub_remotes: true
-# Seconds to poll each sync task (validated=all can run long; we still wait)
+# Seconds to poll each sync task (allow-listed remotes; still wait for completion)
 aap_selfservice_custom_hub_sync_timeout: 1800
 aap_selfservice_custom_hub_sync_delay: 30
 
 portal_hub_rh_certified_collections:
   - redhat.rhel_system_roles
-  - redhat.insights
   - ansible.posix
   - ansible.utils
   - ansible.controller
@@ -745,17 +744,34 @@ portal_hub_rh_certified_collections:
   - amazon.ai
   - azure.azcollection
   - google.cloud
-  - vmware.vmware_rest
   - ansible.netcommon
   - cisco.ios
   - cisco.nxos
   - cisco.aci
   - cisco.iosxr
-  - arista.eos
   - junipernetworks.junos
   - f5networks.f5_modules
   - ansible.windows
   - microsoft.ad
+
+# Curated subset of Ansible validated content (~half of the full validated catalog).
+# Keeps Hub sync faster while still showing network, infra, and cloud validated collections.
+portal_hub_validated_collections:
+  - network.interfaces
+  - network.backup
+  - network.healthchecks
+  - network.bgp
+  - network.acls
+  - infra.controller_configuration
+  - infra.ah_configuration
+  - infra.aap_configuration
+  - infra.ee_utilities
+  - infra.convert2rhel
+  - infra.aap_utilities
+  - infra.ai
+  - cloud.aws_ops
+  - cloud.terraform_ops
+  - cloud.azure_ops
 
 portal_hub_community_collections:
   - community.general
@@ -774,19 +790,30 @@ portal_hub_remotes:
     # requirements built from portal_hub_rh_certified_collections
     requirements_collections: "{{ portal_hub_rh_certified_collections }}"
     wait_sync: true
+    # Keep newest N versions per collection so portal pahCollections finishes
+    # while EE Builder can still offer a version dropdown (not only latest).
+    trim_to_latest: true
+    keep_versions: 3
   - name: validated
     url: "https://console.redhat.com/api/automation-hub/content/validated/"
     auth_url: "{{ portal_rh_sso_token_url }}"
     use_token: true
-    # empty = sync all validated content
-    requirements_collections: []
+    # requirements built from portal_hub_validated_collections
+    requirements_collections: "{{ portal_hub_validated_collections }}"
     wait_sync: true
+    trim_to_latest: true
+    keep_versions: 3
+    # Validated deps (ansible.controller, etc.) live in rh-certified, not
+    # validated. Leave Sync all dependencies off or the remote sync fails.
+    sync_dependencies: false
   - name: community
     url: "https://galaxy.ansible.com/api/"
     auth_url: ""
     use_token: false
     requirements_collections: "{{ portal_hub_community_collections }}"
     wait_sync: true
+    trim_to_latest: true
+    keep_versions: 3
 
 # -------------------------------------------------------------------
 # Behavior Settings

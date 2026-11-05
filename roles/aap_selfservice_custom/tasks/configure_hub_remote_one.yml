@@ -1,10 +1,13 @@
 ---
 # SPDX-License-Identifier: MIT-0
 # Configure a single Hub collection remote + optional sync.
-# Loop var: hub_remote (name, url, auth_url, use_token, requirements_collections, wait_sync)
+# Loop var: hub_remote (name, url, auth_url, use_token, requirements_collections,
+#   wait_sync, sync_dependencies, trim_to_latest)
 #
 # AAP often ships rh-certified + community remotes only; validated may be a
 # repository with "no remote". Create the remote (and repo if needed) then sync.
+# sync_dependencies maps to the Hub UI "Sync all dependencies" checkbox
+# (pulp_ansible CollectionRemote.sync_dependencies; default true).
 
 - name: Build requirements_file for {{ hub_remote.name }}
   ansible.builtin.set_fact:
@@ -18,7 +21,8 @@
           'name': hub_remote.name,
           'url': hub_remote.url,
           'tls_validation': true,
-          'requirements_file': _hub_requirements_file
+          'requirements_file': _hub_requirements_file,
+          'sync_dependencies': hub_remote.sync_dependencies | default(true) | bool
         }
         | combine(
             {'auth_url': hub_remote.auth_url, 'token': portal_hub_token}
@@ -225,3 +229,13 @@
           Hub remote '{{ hub_remote.name }}' sync state=
           {{ _hub_sync_task.json.state | default('unknown/timeout') }}
           {{ '(check Remotes UI if not completed)' if (_hub_sync_task.json.state | default('')) != 'completed' else '' }}
+
+# Portal pahCollections indexes every collection version. Certified remotes
+# often ship hundreds of versions; trim to latest so portal Sync Now finishes.
+- name: "Trim {{ hub_remote.name }} to latest versions for portal sync"
+  ansible.builtin.include_tasks: trim_hub_repo_to_latest.yml
+  when:
+    - hub_remote.trim_to_latest | default(false) | bool
+    - hub_remote.wait_sync | default(true) | bool
+    - _hub_sync_task is defined
+    - (_hub_sync_task.json.state | default('')) == 'completed'

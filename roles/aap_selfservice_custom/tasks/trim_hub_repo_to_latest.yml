@@ -1,0 +1,130 @@
+---
+# SPDX-License-Identifier: MIT-0
+# After a Hub remote sync, pin requirements_file to the newest N versions
+# of each collection already in the repository, then mirror-sync so older
+# versions are removed.
+#
+# Why: Automation Portal pahCollections syncs every collection version
+# (plus a per-version detail call). ~20 certified collections can still
+# hold 800+ versions and portal Sync Now never finishes. Keeping a small
+# N (default 3) keeps sync fast while still letting learners pick among
+# multiple versions in the EE Builder collections picker.
+#
+# Expects loop context from configure_hub_remote_one.yml:
+#   hub_remote (optional keep_versions, default 3),
+#   _hub_remote_href, _hub_repo_href
+#   aap_selfservice_custom_controller_url / admin / verify_ssl
+
+- name: "Set keep_versions for {{ hub_remote.name }}"
+  ansible.builtin.set_fact:
+    _hub_keep_versions: "{{ hub_remote.keep_versions | default(3) | int }}"
+
+- name: "Build pinned requirements (newest {{ _hub_keep_versions }} per collection) for {{ hub_remote.name }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python | default('/usr/bin/python3') }}"
+      - "{{ role_path }}/files/trim_hub_versions.py"
+  environment:
+    HUB_BASE_URL: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}"
+    HUB_USER: "{{ aap_selfservice_custom_admin_username }}"
+    HUB_PASSWORD: "{{ aap_selfservice_custom_admin_password }}"
+    HUB_REPO: "{{ hub_remote.name }}"
+    KEEP_VERSIONS: "{{ _hub_keep_versions }}"
+    VERIFY_SSL: "{{ aap_selfservice_custom_verify_ssl | bool | lower }}"
+  register: _hub_pin_build
+  changed_when: false
+  no_log: true
+
+- name: "Parse pin build result for {{ hub_remote.name }}"
+  ansible.builtin.set_fact:
+    _hub_pin_result: "{{ _hub_pin_build.stdout | from_json }}"
+
+- name: "Skip trim when {{ hub_remote.name }} has no collections"
+  ansible.builtin.debug:
+    msg: "No collections in {{ hub_remote.name }}; skipping version trim."
+  when: (_hub_pin_result.count_pins | default(0) | int) == 0
+
+- name: "Report trim plan for {{ hub_remote.name }}"
+  when: (_hub_pin_result.count_pins | default(0) | int) > 0
+  ansible.builtin.debug:
+    msg: >-
+      Trimming {{ hub_remote.name }} to newest {{ _hub_keep_versions }}
+      version(s) each: {{ _hub_pin_result.count_collections }} collection(s),
+      {{ _hub_pin_result.count_pins }} pinned version(s).
+
+- name: "PATCH {{ hub_remote.name }} remote to pinned versions"
+  when: (_hub_pin_result.count_pins | default(0) | int) > 0
+  ansible.builtin.uri:
+    url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}{{ _hub_remote_href }}"
+    method: PATCH
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body:
+      requirements_file: "{{ _hub_pin_result.requirements_file }}"
+    status_code: [200, 201, 202]
+  no_log: true
+
+- name: "Mirror-sync {{ hub_remote.name }} to apply version trim"
+  when: (_hub_pin_result.count_pins | default(0) | int) > 0
+  ansible.builtin.uri:
+    url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}{{ _hub_repo_href }}sync/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    body_format: json
+    body:
+      remote: "{{ _hub_remote_href }}"
+      mirror: true
+      optimize: true
+    status_code: [200, 201, 202]
+  register: _hub_trim_sync_start
+  no_log: true
+
+- name: "Wait for {{ hub_remote.name }} trim sync"
+  when:
+    - (_hub_pin_result.count_pins | default(0) | int) > 0
+    - hub_remote.wait_sync | default(true) | bool
+  block:
+    - name: Resolve trim sync task href
+      ansible.builtin.set_fact:
+        _hub_trim_task_href: >-
+          {{
+            _hub_trim_sync_start.json.task
+            | default(_hub_trim_sync_start.json.tasks[0] | default(''))
+          }}
+
+    - name: "Poll trim sync task for {{ hub_remote.name }}"
+      ansible.builtin.uri:
+        url: >-
+          {{
+            _hub_trim_task_href
+            if (_hub_trim_task_href | regex_search('^https?://'))
+            else (
+              (aap_selfservice_custom_controller_url | regex_replace('/$', ''))
+              ~ _hub_trim_task_href
+            )
+          }}
+        method: GET
+        user: "{{ aap_selfservice_custom_admin_username }}"
+        password: "{{ aap_selfservice_custom_admin_password }}"
+        force_basic_auth: true
+        validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+        status_code: 200
+      register: _hub_trim_sync_task
+      until: >-
+        (_hub_trim_sync_task.json.state | default('')) in ['completed', 'failed', 'canceled']
+      retries: "{{ ((aap_selfservice_custom_hub_sync_timeout | int) / (aap_selfservice_custom_hub_sync_delay | int)) | int }}"
+      delay: "{{ aap_selfservice_custom_hub_sync_delay | int }}"
+      when: (_hub_trim_task_href | default('') | length) > 0
+      no_log: true
+
+    - name: "Report {{ hub_remote.name }} trim sync result"
+      ansible.builtin.debug:
+        msg: >-
+          Hub remote '{{ hub_remote.name }}' keep-{{ _hub_keep_versions }}
+          trim state={{ _hub_trim_sync_task.json.state | default('unknown/timeout') }}

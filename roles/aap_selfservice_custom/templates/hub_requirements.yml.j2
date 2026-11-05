@@ -1,5 +1,12 @@
 ---
 collections:
 {% for collection in hub_remote.requirements_collections %}
+{% if collection is mapping %}
+  - name: {{ collection.name }}
+{% if collection.version is defined %}
+    version: "{{ collection.version }}"
+{% endif %}
+{% else %}
   - name: {{ collection }}
+{% endif %}
 {% endfor %}
