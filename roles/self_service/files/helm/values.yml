@@ -199,6 +199,20 @@ redhat-developer-hub:
               target: https://github.com/ansible/ansible-rhdh-templates/blob/v2.0.1/templates/ee-network-automation.yaml
               rules:
                 - allow: [Template]
+            # Pre-built Parasol EE definitions (org sample repos). Learners browse
+            # these in Catalog; the Module 5 build stays on Hub/Controller only.
+            - type: url
+              target: https://github.com/AAP-Automation-Portal-Lab/parasol-cloud-provisioning-ee/blob/main/parasol-cloud-provisioning-ee/catalog-info.yaml
+              rules:
+                - allow: [Component]
+            - type: url
+              target: https://github.com/AAP-Automation-Portal-Lab/parasol-linux-patching-ee/blob/main/parasol-linux-patching-ee/catalog-info.yaml
+              rules:
+                - allow: [Component]
+            - type: url
+              target: https://github.com/AAP-Automation-Portal-Lab/parasol-security-scanning-ee/blob/main/parasol-security-scanning-ee/catalog-info.yaml
+              rules:
+                - allow: [Component]
           orphanStrategy: delete
           pollingInterval:
             seconds: 1

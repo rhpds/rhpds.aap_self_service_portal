@@ -97,6 +97,15 @@ aap_selfservice_custom_credentials:
     credential_type: Machine
     inputs: {}
 
+# Container Registry credential so Controller can pull lab-built EE images
+# from this instance's Private Automation Hub (Module 5 Use in Controller).
+# Created in setup_credentials.yml (not in the static list above) because
+# host/username/password come from the per-instance controller connection.
+aap_selfservice_custom_hub_registry_credential_name: Private Automation Hub Registry
+aap_selfservice_custom_hub_registry_credential_description: >-
+  Pull EE images from this AAP instance Private Automation Hub.
+  Select this when promoting a Hub EE into Controller (Use in Controller).
+
 # -------------------------------------------------------------------
 # Demo Projects Configuration
 # -------------------------------------------------------------------
