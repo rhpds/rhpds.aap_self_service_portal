@@ -191,6 +191,14 @@ redhat-developer-hub:
               target: https://github.com/ansible/ansible-rhdh-templates/blob/v2.0.1/templates/ee-start-from-scratch.yaml
               rules:
                 - allow: [Template]
+            - type: url
+              target: https://github.com/ansible/ansible-rhdh-templates/blob/v2.0.1/templates/ee-cloud-automation.yaml
+              rules:
+                - allow: [Template]
+            - type: url
+              target: https://github.com/ansible/ansible-rhdh-templates/blob/v2.0.1/templates/ee-network-automation.yaml
+              rules:
+                - allow: [Template]
           orphanStrategy: delete
           pollingInterval:
             seconds: 1
