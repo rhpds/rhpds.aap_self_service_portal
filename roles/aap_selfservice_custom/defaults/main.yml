@@ -115,7 +115,7 @@ aap_selfservice_custom_projects:
     organization: Default
     scm_type: git
     scm_url: https://github.com/ansible-tmm/ssap-lab
-    scm_branch: fix/realistic-time-server-output
+    scm_branch: main
     default_environment: Default execution environment
 
 # -------------------------------------------------------------------
