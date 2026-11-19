@@ -1,0 +1,6 @@
+---
+- name: Parasol critical circuit health check
+  hosts: network
+  gather_facts: false
+  roles:
+    - role: parasol.network.circuit_health

@@ -1,0 +1,8 @@
+---
+# Parasol Platform, apply standard host baseline
+- name: Apply Parasol host baseline
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: parasol.platform.host_baseline

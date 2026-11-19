@@ -30,11 +30,12 @@
     # EDA cluster rolebinding for k8s event sources
     aap_instance_eda_create_rolebinding: true
 
-    # Hub configuration
+    # Hub configuration (RWX required — api/content/worker share one PVC)
     aap_instance_hub_content_workers: 2
     aap_instance_hub_api_workers: 2
     aap_instance_hub_file_storage_size: 100Gi
-    aap_instance_hub_file_storage_access_mode: ReadWriteOnce
+    aap_instance_hub_file_storage_access_mode: ReadWriteMany
+    aap_instance_hub_file_storage_class: ocs-external-storagecluster-cephfs
 
     # Production-grade resources
     aap_instance_controller_replicas: 2

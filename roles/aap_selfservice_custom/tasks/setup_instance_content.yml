@@ -8,6 +8,11 @@
 #   aap_selfservice_custom_admin_username: Admin username
 #   aap_selfservice_custom_admin_password: Admin password
 #   instance_label: Human-readable label for logging
+#   instance_lab_user: lab user id (e.g. user1) for GitHub repo naming
+
+- name: Default instance_lab_user for GitHub JT extra_vars
+  ansible.builtin.set_fact:
+    instance_lab_user: "{{ instance_lab_user | default(instance_label | default('user1')) }}"
 
 - name: Display instance configuration start
   ansible.builtin.debug:
@@ -15,6 +20,7 @@
       - "Configuring AAP instance: {{ instance_label }}"
       - "Controller URL: {{ aap_selfservice_custom_controller_url }}"
       - "Admin Username: {{ aap_selfservice_custom_admin_username }}"
+      - "Lab user (GitHub repo prefix): {{ instance_lab_user }}"
 
 # -------------------------------------------------------------------
 # Validate AAP Connectivity
@@ -37,6 +43,28 @@
 - name: Display AAP connectivity success
   ansible.builtin.debug:
     msg: "AAP Gateway API is responding successfully"
+
+# Gateway OAuth token for ansible.controller (avoids "Failed to get token: 404" on AAP 2.7)
+- name: Create Gateway OAuth token for Controller modules
+  ansible.builtin.include_tasks: create_gateway_token.yml
+
+# Hub remotes: token + SSO + curated allow-lists, then sync (needs Hub enabled)
+- name: Configure Hub remotes and sync collections
+  ansible.builtin.include_tasks: configure_hub_remotes.yml
+  when: aap_selfservice_custom_configure_hub_remotes | default(true) | bool
+
+# Parasol collections → this Hub `published` (portal Collections tab)
+- name: Publish lab collections to private Hub
+  ansible.builtin.include_tasks: publish_lab_collections.yml
+  when: aap_selfservice_custom_publish_lab_collections | default(true) | bool
+
+# EE Builder: pre-create org repo + Actions secrets for this instance Hub
+- name: Provision EE GitHub repo team secrets and variables
+  ansible.builtin.include_tasks: provision_ee_github_repo.yml
+  when:
+    - aap_selfservice_custom_provision_ee_github_repos | default(true) | bool
+    - portal_github_token is defined
+    - (portal_github_token | default('') | trim | length) > 0
 
 # -------------------------------------------------------------------
 # Create Demo Content in Order

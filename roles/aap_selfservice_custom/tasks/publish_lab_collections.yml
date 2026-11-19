@@ -1,0 +1,265 @@
+---
+# SPDX-License-Identifier: MIT-0
+# Publish Parasol lab collections into Hub `published` for pahCollections.
+#
+# Flow (kept intentionally simple):
+#   1) build tarballs once per provision host
+#   2) ensure Hub namespace exists
+#   3) ansible-galaxy publish to /api/galaxy/ (admin basic auth)
+#   4) wait for staging (or published if auto-approve)
+#   5) move staging → published
+#   6) verify published
+#
+# Multi-instance: reset per-instance facts every call so user2 does not inherit
+# user1 task lists / coords.
+#
+# Expects:
+#   aap_selfservice_custom_controller_url / _admin_username / _admin_password
+#   portal_lab_collections / portal_lab_collection_namespace
+
+- name: Reset per-instance publish state
+  ansible.builtin.set_fact:
+    _lab_cv_tasks: []
+    _lab_cv_hrefs: []
+    _lab_collection_coords: []
+    _lab_land_summary: []
+    _lab_galaxy_api: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy"
+    _lab_galaxy_publish_url: "{{ aap_selfservice_custom_controller_url | regex_replace('/$', '') }}/api/galaxy/"
+    _lab_collections_src: "{{ role_path }}/files/lab_collections"
+    _lab_collections_build: /tmp/portal-lab-collections-build-{{ guid | default('lab') }}
+    _lab_galaxy_cfg: /tmp/portal-lab-galaxy-{{ guid | default('lab') }}-{{ instance_lab_user | default(instance_label | default('user')) }}.cfg
+
+- name: Ensure lab collections build directory
+  ansible.builtin.file:
+    path: "{{ _lab_collections_build }}"
+    state: directory
+    mode: "0755"
+
+- name: Build collection tarballs once per provision host
+  when: _lab_collection_tarballs is not defined
+  block:
+    - name: Build each Parasol collection
+      ansible.builtin.command:
+        argv:
+          - ansible-galaxy
+          - collection
+          - build
+          - "{{ _lab_collections_src }}/{{ item }}"
+          - --output-path
+          - "{{ _lab_collections_build }}"
+      loop: "{{ portal_lab_collections }}"
+      changed_when: true
+
+    - name: Find built collection tarballs
+      ansible.builtin.find:
+        paths: "{{ _lab_collections_build }}"
+        patterns: "*.tar.gz"
+      register: _lab_collection_find
+
+    - name: Record built tarball paths
+      ansible.builtin.set_fact:
+        _lab_collection_tarballs: "{{ _lab_collection_find.files | map(attribute='path') | list | sort }}"
+
+    - name: Require built tarballs
+      ansible.builtin.assert:
+        that:
+          - (_lab_collection_tarballs | length) == (portal_lab_collections | length)
+        fail_msg: >-
+          Expected {{ portal_lab_collections | length }} collection tarballs,
+          found {{ _lab_collection_tarballs | length }}.
+
+- name: Create Hub namespace for lab collections
+  ansible.builtin.uri:
+    url: "{{ _lab_galaxy_api }}/_ui/v1/namespaces/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: "{{ portal_lab_collection_namespace }}"
+      groups: []
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: [201, 204, 400, 409]
+  failed_when: false
+  no_log: true
+
+- name: Write temporary galaxy server config for publish
+  ansible.builtin.copy:
+    dest: "{{ _lab_galaxy_cfg }}"
+    mode: "0600"
+    content: |
+      [galaxy]
+      server_list = lab_hub_publish
+
+      [galaxy_server.lab_hub_publish]
+      url = {{ _lab_galaxy_publish_url }}
+      username = {{ aap_selfservice_custom_admin_username }}
+      password = {{ aap_selfservice_custom_admin_password }}
+  no_log: true
+
+# --no-wait: avoid gateway TLS flakes while ansible-galaxy polls import.
+# Content must already pass galaxy-importer (role READMEs, author <=64, etc.);
+# we confirm landing via staging/published API polls below.
+- name: Publish each lab collection tarball to Hub
+  ansible.builtin.command:
+    argv:
+      - ansible-galaxy
+      - collection
+      - publish
+      - "{{ item }}"
+      - --server
+      - lab_hub_publish
+      - --ignore-certs
+      - --no-wait
+  environment:
+    ANSIBLE_CONFIG: "{{ _lab_galaxy_cfg }}"
+  loop: "{{ _lab_collection_tarballs }}"
+  register: _lab_collection_publish
+  changed_when: >-
+    'already' not in (
+      (_lab_collection_publish.stdout | default('')) ~ ' ' ~
+      (_lab_collection_publish.stderr | default(''))
+    ) | lower
+  failed_when: false
+  loop_control:
+    label: "{{ item | basename }}"
+
+- name: Show ansible-galaxy publish results
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item | basename }}: rc={{ item.rc | default('?') }}
+      stdout={{ item.stdout | default('') | truncate(400) }}
+      stderr={{ item.stderr | default('') | truncate(400) }}
+  loop: "{{ _lab_collection_publish.results }}"
+  loop_control:
+    label: "{{ item.item | basename }}"
+
+- name: Fail when ansible-galaxy publish/import failed
+  ansible.builtin.fail:
+    msg: >-
+      ansible-galaxy publish/import failed for {{ item.item | basename }}
+      (rc={{ item.rc | default('?') }}).
+      publish_url={{ _lab_galaxy_publish_url }}
+      stdout={{ item.stdout | default('') }}
+      stderr={{ item.stderr | default('') }}
+  when:
+    - (item.rc | default(0)) != 0
+    - ('already' not in ((item.stdout | default('')) ~ ' ' ~ (item.stderr | default(''))) | lower)
+  loop: "{{ _lab_collection_publish.results }}"
+  loop_control:
+    label: "{{ item.item | basename }}"
+
+- name: Resolve collection coords from tarball names
+  ansible.builtin.set_fact:
+    _lab_collection_coords: "{{ _lab_collection_coords + [_coord] }}"
+  vars:
+    _base: "{{ item | basename }}"
+    _coord:
+      namespace: "{{ _base | regex_replace('^([^-]+)-.*$', '\\1') }}"
+      name: "{{ _base | regex_replace('^[^-]+-([^-]+)-.*$', '\\1') }}"
+      version: "{{ _base | regex_replace('^[^-]+-[^-]+-(.*)\\.tar\\.gz$', '\\1') }}"
+  loop: "{{ _lab_collection_tarballs }}"
+  loop_control:
+    label: "{{ item | basename }}"
+
+- name: Wait until each collection version is in staging
+  ansible.builtin.uri:
+    url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/staging/collections/index/{{ item.namespace }}/{{ item.name }}/versions/{{ item.version }}/"
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: [200, 404]
+  register: _lab_staging_get
+  until: (_lab_staging_get.status | default(0)) == 200
+  retries: 24
+  delay: 5
+  loop: "{{ _lab_collection_coords }}"
+  failed_when: false
+  loop_control:
+    label: "{{ item.namespace }}.{{ item.name }}:{{ item.version }}"
+
+- name: Check published for versions not in staging
+  ansible.builtin.uri:
+    url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/published/collections/index/{{ item.item.namespace }}/{{ item.item.name }}/versions/{{ item.item.version }}/"
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: [200, 404]
+  register: _lab_published_early
+  until: (_lab_published_early.status | default(0)) == 200
+  retries: 12
+  delay: 5
+  loop: "{{ _lab_staging_get.results }}"
+  when: (item.status | default(0)) != 200
+  failed_when: false
+  loop_control:
+    label: "{{ item.item.namespace }}.{{ item.item.name }}:{{ item.item.version }}"
+
+- name: Move collections from staging to published when needed
+  ansible.builtin.uri:
+    url: "{{ _lab_galaxy_api }}/v3/collections/{{ item.item.namespace }}/{{ item.item.name }}/versions/{{ item.item.version }}/move/staging/published/"
+    method: POST
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: [200, 201, 202, 204, 400, 404]
+    return_content: true
+  loop: "{{ _lab_staging_get.results }}"
+  when: (item.status | default(0)) == 200
+  register: _lab_collection_move
+  failed_when: false
+  loop_control:
+    label: "{{ item.item.namespace }}.{{ item.item.name }}:{{ item.item.version }}"
+
+- name: Wait briefly for Hub move tasks
+  ansible.builtin.pause:
+    seconds: 10
+    prompt: "Waiting for Hub to finish moving Parasol collections..."
+
+- name: Verify each lab collection is in Hub published
+  ansible.builtin.uri:
+    url: "{{ _lab_galaxy_api }}/v3/plugin/ansible/content/published/collections/index/{{ item.namespace }}/{{ item.name }}/"
+    method: GET
+    user: "{{ aap_selfservice_custom_admin_username }}"
+    password: "{{ aap_selfservice_custom_admin_password }}"
+    force_basic_auth: true
+    validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
+    status_code: [200, 404]
+  register: _lab_published_get
+  until: (_lab_published_get.status | default(0)) == 200
+  retries: 24
+  delay: 5
+  loop: "{{ _lab_collection_coords }}"
+  failed_when: false
+  loop_control:
+    label: "{{ item.namespace }}.{{ item.name }}"
+
+- name: Fail if any Parasol collection is missing from Hub published
+  ansible.builtin.assert:
+    that:
+      - (_lab_published_get.results | map(attribute='status') | list | min) == 200
+    fail_msg: >-
+      Hub published missing Parasol collections after publish/move.
+      staging={{ _lab_staging_get.results | map(attribute='status') | list }}
+      published={{ _lab_published_get.results | map(attribute='status') | list }}
+      url={{ aap_selfservice_custom_controller_url }}
+      Check Automation Content → Imports for import errors.
+
+- name: Remove temporary galaxy server config
+  ansible.builtin.file:
+    path: "{{ _lab_galaxy_cfg }}"
+    state: absent
+  no_log: true
+
+- name: Report lab collections publish status
+  ansible.builtin.debug:
+    msg: >-
+      Published {{ portal_lab_collections | length }} Parasol collection(s)
+      to {{ aap_selfservice_custom_controller_url }} Hub published.
+      Portal Collections → Sync Now should list parasol.*.

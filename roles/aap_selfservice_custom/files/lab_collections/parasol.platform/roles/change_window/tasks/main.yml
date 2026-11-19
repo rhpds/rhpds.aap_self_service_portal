@@ -1,0 +1,23 @@
+---
+- name: Skip change-window enforcement when bypassed
+  ansible.builtin.meta: end_role
+  when: not (parasol_change_window_enforce | bool) or (parasol_change_window_bypass | bool)
+
+- name: Evaluate whether current time is inside the change window
+  ansible.builtin.set_fact:
+    _nw_in_window: >-
+      {{
+        (now(utc=true, fmt='%w') | int in parasol_change_window_days)
+        and (now(utc=true, fmt='%H') | int >= parasol_change_window_start_hour | int)
+        and (now(utc=true, fmt='%H') | int < parasol_change_window_end_hour | int)
+      }}
+
+- name: Fail when outside the approved Parasol change window
+  ansible.builtin.fail:
+    msg: >-
+      Change blocked by parasol.platform.change_window.
+      Allowed days={{ parasol_change_window_days }}
+      hours={{ parasol_change_window_start_hour }}-{{ parasol_change_window_end_hour }}
+      tz={{ parasol_change_window_tz }}.
+      Set parasol_change_window_bypass=true only with CAB approval.
+  when: not (_nw_in_window | bool)

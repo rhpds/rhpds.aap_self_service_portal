@@ -1,0 +1,86 @@
+---
+# SPDX-License-Identifier: MIT-0
+# Destroy-time cleanup for EE Builder GitHub resources created at provision:
+#   - Repos matching {{ guid }}-*-ee in portal_github_org
+#   - Team lab-{{ guid }}
+#
+# Expects: portal_github_token, portal_github_org, guid
+
+- name: Require GitHub PAT and guid for EE GitHub deprovision
+  ansible.builtin.assert:
+    that:
+      - portal_github_token is defined
+      - (portal_github_token | trim | length) > 0
+      - guid is defined
+      - (guid | string | trim | length) > 0
+    fail_msg: >-
+      Need vaulted portal_github_token and guid to delete
+      {{ portal_github_org | default('AAP-Automation-Portal-Lab') }}/{{ guid }}-*-ee
+      and team lab-{{ guid }}.
+  no_log: true
+
+- name: Set EE GitHub naming for deprovision
+  ansible.builtin.set_fact:
+    _ee_gh_org: "{{ portal_github_org | default('AAP-Automation-Portal-Lab') | trim }}"
+    _ee_gh_team_slug: "{{ ('lab-' ~ guid) | lower | regex_replace('[^a-z0-9]+', '-') | regex_replace('^-|-$', '') }}"
+    _ee_gh_headers:
+      Authorization: "Bearer {{ portal_github_token | trim }}"
+      Accept: application/vnd.github+json
+      X-GitHub-Api-Version: "2022-11-28"
+    _ee_repo_name_regex: "^{{ guid }}-.+-ee$"
+  no_log: true
+
+- name: List org repositories (page through results)
+  ansible.builtin.uri:
+    url: "https://api.github.com/orgs/{{ _ee_gh_org }}/repos?per_page=100&page={{ item }}"
+    method: GET
+    headers: "{{ _ee_gh_headers }}"
+    status_code: 200
+  loop: "{{ range(1, 6) | list }}"
+  register: _ee_repos_pages
+  no_log: true
+
+- name: Collect EE repo names for this guid
+  ansible.builtin.set_fact:
+    _ee_repos_to_delete: >-
+      {{
+        _ee_repos_pages.results
+        | map(attribute='json')
+        | flatten
+        | selectattr('name', 'match', _ee_repo_name_regex)
+        | map(attribute='name')
+        | list
+        | unique
+      }}
+
+- name: Report EE repos scheduled for delete
+  ansible.builtin.debug:
+    msg: >-
+      Deleting {{ _ee_repos_to_delete | length }} EE repo(s) in
+      {{ _ee_gh_org }} matching {{ _ee_repo_name_regex }}:
+      {{ _ee_repos_to_delete | join(', ') | default('(none)', true) }}
+
+- name: Delete EE GitHub repositories
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ _ee_gh_org }}/{{ item }}"
+    method: DELETE
+    headers: "{{ _ee_gh_headers }}"
+    status_code: [204, 404]
+  loop: "{{ _ee_repos_to_delete }}"
+  when: (_ee_repos_to_delete | length) > 0
+  no_log: true
+
+- name: Delete lab GitHub team {{ _ee_gh_team_slug }}
+  ansible.builtin.uri:
+    url: "https://api.github.com/orgs/{{ _ee_gh_org }}/teams/{{ _ee_gh_team_slug }}"
+    method: DELETE
+    headers: "{{ _ee_gh_headers }}"
+    status_code: [204, 404]
+  no_log: true
+
+- name: Report EE GitHub deprovision complete
+  ansible.builtin.debug:
+    msg: >-
+      EE GitHub cleanup done for guid={{ guid }}:
+      repos deleted={{ _ee_repos_to_delete | length }},
+      team={{ _ee_gh_team_slug }} removed (or already absent).

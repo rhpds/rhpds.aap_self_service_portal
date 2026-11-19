@@ -104,6 +104,9 @@
     status_code: "{{ ocp4_workload_aap_multiinstance_validation_http_success_codes }}"
     timeout: "{{ ocp4_workload_aap_multiinstance_validation_http_timeout }}"
   register: _ssap_http_check
+  until: _ssap_http_check is not failed
+  retries: 10
+  delay: 30
   ignore_errors: true
   when: _ssap_route_url | length > 0
 
@@ -180,7 +183,7 @@
     _ocp4_workload_aap_multiinstance_validation_issues: >-
       {{
         _ocp4_workload_aap_multiinstance_validation_issues + [
-          _current_user + ' SSAP: ' + _ssap_pods_running + '/' + _ssap_pods_total + ' pods running'
+          _current_user ~ ' SSAP: ' ~ _ssap_pods_running ~ '/' ~ _ssap_pods_total ~ ' pods running'
         ]
       }}
   when:

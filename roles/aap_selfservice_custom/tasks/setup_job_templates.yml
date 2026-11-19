@@ -7,6 +7,15 @@
     msg: "Creating {{ aap_selfservice_custom_job_templates | length }} demo job templates..."
   when: aap_selfservice_custom_debug | bool
 
+# Resolve per-instance GitHub team/repo here so multi-user loops do not reuse a
+# defaults list templated for the first instance only.
+- name: Resolve GitHub Join Lab Team extra_vars for this instance
+  ansible.builtin.set_fact:
+    _github_join_extra_vars:
+      github_org: "{{ portal_github_org }}"
+      github_team: "lab-{{ guid }}"
+      github_repo: "{{ guid }}-{{ instance_lab_user | default('user1') }}-ee"
+
 - name: Create AAP job templates
   ansible.controller.job_template:
     name: "{{ item.name }}"
@@ -23,19 +32,21 @@
     ask_variables_on_launch: "{{ item.ask_variables_on_launch | default(false) }}"
     survey_enabled: "{{ item.survey_enabled | default(false) }}"
     survey_spec: "{{ item.survey_spec | default(omit) }}"
+    extra_vars: "{{ _github_join_extra_vars if item.name == 'GitHub Join Lab Team' else (item.extra_vars if item.extra_vars is defined else omit) }}"
     state: present
     controller_host: "{{ aap_selfservice_custom_controller_url }}"
-    controller_username: "{{ aap_selfservice_custom_admin_username }}"
-    controller_password: "{{ aap_selfservice_custom_admin_password }}"
+    controller_oauthtoken: "{{ aap_selfservice_custom_oauthtoken }}"
     validate_certs: "{{ aap_selfservice_custom_verify_ssl }}"
   loop: "{{ aap_selfservice_custom_job_templates }}"
   loop_control:
     label: "{{ item.name }}"
   register: _job_template_result
-  failed_when:
-    - _job_template_result is failed
-    - not aap_selfservice_custom_skip_existing
-    - "'already exists' not in (_job_template_result.msg | default(''))"
+  failed_when: >-
+    _job_template_result is failed
+    and not (
+      aap_selfservice_custom_skip_existing | bool
+      and ('already exists' in (_job_template_result.msg | default('')))
+    )
 
 - name: Display job templates creation complete
   ansible.builtin.debug:

@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: change_window
+  author: Parasol Platform Engineering
+  description: Guard plays so they only run inside Parasol maintenance windows
+  license: MIT
+  min_ansible_version: "2.14"
+  galaxy_tags: [parasol, change, governance]
+dependencies: []

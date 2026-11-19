@@ -1,0 +1,6 @@
+---
+- name: Nightly Parasol network configuration backup
+  hosts: network
+  gather_facts: false
+  roles:
+    - role: parasol.network.backup_device_config

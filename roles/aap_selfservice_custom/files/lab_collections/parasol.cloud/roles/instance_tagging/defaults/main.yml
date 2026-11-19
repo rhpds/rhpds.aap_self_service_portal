@@ -1,0 +1,8 @@
+---
+parasol_cloud_tags:
+  parasol:owner: platform-automation@parasol.example
+  nw:cost-center: CC-1200
+  nw:environment: lab
+  nw:application: self-service-portal
+parasol_cloud_region: us-east-1
+parasol_cloud_instance_ids: []

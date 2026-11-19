@@ -1,0 +1,9 @@
+---
+parasol_motd_company: Parasol Insurance
+parasol_motd_environment: lab
+parasol_motd_contact: platform-automation@parasol.example
+parasol_timezone: UTC
+parasol_baseline_packages:
+  - chrony
+  - rsync
+  - vim-enhanced

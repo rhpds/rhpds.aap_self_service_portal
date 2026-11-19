@@ -1,0 +1,26 @@
+---
+- name: Render Parasol MOTD
+  ansible.builtin.copy:
+    dest: /etc/motd
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      ============================================================
+       {{ parasol_motd_company }}
+       Environment : {{ parasol_motd_environment }}
+       Host        : {{ inventory_hostname }}
+       Contact     : {{ parasol_motd_contact }}
+       Unauthorized access is prohibited.
+      ============================================================
+
+- name: Ensure baseline packages are present
+  ansible.builtin.package:
+    name: "{{ parasol_baseline_packages }}"
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Set system timezone
+  community.general.timezone:
+    name: "{{ parasol_timezone }}"
+  when: parasol_timezone | length > 0
